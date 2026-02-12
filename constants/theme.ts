@@ -1,53 +1,34 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
+import { MD3LightTheme } from 'react-native-paper';
 
-import { Platform } from 'react-native';
-
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
-
-export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-  },
+export const COLORS = {
+  primary: '#2563eb',      // Bleu vif
+  primaryLight: '#3b82f6', // Bleu clair
+  secondary: '#f59e0b',    // Orange
+  secondaryLight: '#fbbf24', // Orange clair
+  success: '#10b981',      // Vert
+  successLight: '#34d399', // Vert clair
+  danger: '#ef4444',       // Rouge
+  warning: '#f59e0b',      // Orange
+  info: '#3b82f6',         // Bleu clair
+  infoLight: '#60a5fa',    // Bleu très clair
+  dark: '#1f2937',         // Gris foncé
+  darkLight: '#374151',    // Gris
+  light: '#f9fafb',        // Gris très clair
+  white: '#ffffff',
+  black: '#000000',
+  gray: '#94a3b8',         // Gris moyen
+  grayLight: '#e2e8f0',    // Gris clair
+  background: '#f5f7fa',   // Fond gris très clair
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+export const theme = {
+  ...MD3LightTheme,
+  colors: {
+    ...MD3LightTheme.colors,
+    primary: COLORS.primary,
+    secondary: COLORS.secondary,
+    error: COLORS.danger,
+    background: COLORS.background,
+    surface: COLORS.white,
   },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});
+};
