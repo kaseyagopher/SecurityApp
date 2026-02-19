@@ -1,27 +1,82 @@
-import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
-import { Text, Card, Button, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { useEffect, useState } from 'react';
+import { Alert, Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Card, Text } from 'react-native-paper';
+import { ESP32_CONFIG, getEsp32Url } from '../../config/esp32';
 import { COLORS } from '../../constants/theme';
-import { useState } from 'react';
 
 const { width } = Dimensions.get('window');
 
 export default function AccessScreen() {
     const [isScanning, setIsScanning] = useState(false);
     const [lastStatus, setLastStatus] = useState<'success' | 'error' | null>(null);
+    const [biometricAvailable, setBiometricAvailable] = useState<boolean | null>(null);
 
-    const handleScan = () => {
+    useEffect(() => {
+        (async () => {
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+            setBiometricAvailable(hasHardware && isEnrolled);
+        })();
+    }, []);
+
+    const handleScan = async () => {
+        if (!biometricAvailable) {
+            Alert.alert(
+                'Biométrie indisponible',
+                'Aucun capteur d\'empreinte ou Face ID configuré sur cet appareil. Configurez-le dans les paramètres du téléphone.',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+
         setIsScanning(true);
+        setLastStatus(null);
 
-        // Simulation du scan
-        setTimeout(() => {
+        try {
+            const result = await LocalAuthentication.authenticateAsync({
+                promptMessage: 'Vérifiez votre identité pour ouvrir la porte',
+                cancelLabel: 'Annuler',
+                disableDeviceFallback: false,
+            });
+
+            if (!result.success) {
+                setIsScanning(false);
+                setLastStatus('error');
+                setTimeout(() => setLastStatus(null), 3000);
+                return;
+            }
+
+            // Empreinte / Face ID OK → envoyer la commande à l'ESP32
+            const url = getEsp32Url(ESP32_CONFIG.endpoints.openDoor);
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), ESP32_CONFIG.timeout);
+
+            const response = await fetch(url, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'open' }),
+            });
+            clearTimeout(timeout);
+
+            if (response.ok) {
+                setLastStatus('success');
+            } else {
+                setLastStatus('error');
+            }
+        } catch (err) {
+            setLastStatus('error');
+            const message = err instanceof Error ? err.message : 'Erreur réseau';
+            if (__DEV__) {
+                Alert.alert('Erreur ESP32', `Impossible de contacter la porte: ${message}. Vérifiez l'IP dans config/esp32.ts et que l'ESP32 est allumé.`);
+            }
+        } finally {
             setIsScanning(false);
-            setLastStatus('success');
-
-            // Reset du statut après 3 secondes
             setTimeout(() => setLastStatus(null), 3000);
-        }, 2000);
+        }
     };
 
     return (
@@ -35,7 +90,7 @@ export default function AccessScreen() {
             >
                 <View style={styles.headerContent}>
                     <Text style={styles.headerTitle}>Accès sécurisé</Text>
-                    <Text style={styles.headerSubtitle}>Système biométrique</Text>
+                    <Text style={styles.headerSubtitle}>Empreinte du téléphone → ESP32</Text>
                 </View>
             </LinearGradient>
 
@@ -89,7 +144,7 @@ export default function AccessScreen() {
                                         ? 'Bienvenue Godelive'
                                         : lastStatus === 'error'
                                             ? 'Réessayez ou utilisez une autre méthode'
-                                            : 'Placez votre doigt sur le capteur'
+                                            : 'Utilisez l\'empreinte ou Face ID de votre téléphone'
                                 }
                             </Text>
                         </View>
@@ -121,39 +176,7 @@ export default function AccessScreen() {
                         </TouchableOpacity>
 
                         {/* Méthodes alternatives */}
-                        <View style={styles.alternativeSection}>
-                            <Text style={styles.alternativeTitle}>Autres méthodes</Text>
-
-                            <View style={styles.alternativeGrid}>
-                                <TouchableOpacity style={styles.alternativeItem}>
-                                    <View style={[styles.alternativeIcon, { backgroundColor: COLORS.primary + '10' }]}>
-                                        <MaterialCommunityIcons name="key" size={28} color={COLORS.primary} />
-                                    </View>
-                                    <Text style={styles.alternativeText}>Code PIN</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity style={styles.alternativeItem}>
-                                    <View style={[styles.alternativeIcon, { backgroundColor: COLORS.secondary + '10' }]}>
-                                        <MaterialCommunityIcons name="cellphone" size={28} color={COLORS.secondary} />
-                                    </View>
-                                    <Text style={styles.alternativeText}>Carte RFID</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity style={styles.alternativeItem}>
-                                    <View style={[styles.alternativeIcon, { backgroundColor: COLORS.success + '10' }]}>
-                                        <MaterialCommunityIcons name="face-recognition" size={28} color={COLORS.success} />
-                                    </View>
-                                    <Text style={styles.alternativeText}>Reconnaissance</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity style={styles.alternativeItem}>
-                                    <View style={[styles.alternativeIcon, { backgroundColor: COLORS.info + '10' }]}>
-                                        <MaterialCommunityIcons name="qrcode" size={28} color={COLORS.info} />
-                                    </View>
-                                    <Text style={styles.alternativeText}>QR Code</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
+                       
                     </Card.Content>
                 </LinearGradient>
             </Card>
