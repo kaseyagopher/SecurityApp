@@ -1,13 +1,45 @@
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
-import { Text, Card, Button, Avatar, Badge } from 'react-native-paper';
+import { Text, Card, Avatar, Badge } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
 import { Link } from 'expo-router';
+import { useAuth } from '../../contexts/AuthContext';
+import { apiUrl } from '../../config/api';
+import { useEffect, useState } from 'react';
+import { TouchableOpacity } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
+type HistoryItem = { id: number; event_type: string; result: string; name: string | null; created_at: string };
+
 export default function HomeScreen() {
+  const { user, token } = useAuth();
+  const displayName = user?.name?.split(' ')[0] || 'Utilisateur';
+  const [recentActivities, setRecentActivities] = useState<HistoryItem[]>([]);
+  const [lastAccess, setLastAccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(apiUrl('/api/history?limit=5'), { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: HistoryItem[]) => {
+        setRecentActivities(data);
+        const last = data.find((h) => h.event_type === 'door_open' && h.result === 'success');
+        if (last) {
+          const d = new Date(last.created_at);
+          setLastAccess(d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ' aujourd\'hui');
+        }
+      })
+      .catch(() => {});
+  }, [token]);
+
+  const getEventLabel = (h: HistoryItem) => {
+    if (h.event_type === 'door_open') return h.result === 'success' ? 'Accès autorisé' : 'Accès refusé';
+    if (h.event_type === 'alarm') return 'Alarme déclenchée';
+    return h.event_type;
+  };
+
   return (
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
 
@@ -21,11 +53,11 @@ export default function HomeScreen() {
           <View style={styles.header}>
             <View>
               <Text style={styles.greeting}>Bonjour,</Text>
-              <Text style={styles.userName}>Godelive 👋</Text>
+              <Text style={styles.userName}>{displayName} 👋</Text>
             </View>
             <Avatar.Text
                 size={55}
-                label="GK"
+                label={(user?.name ?? 'U').slice(0, 2).toUpperCase()}
                 style={styles.avatar}
                 labelStyle={styles.avatarLabel}
             />
@@ -59,7 +91,7 @@ export default function HomeScreen() {
               <View style={styles.statusTextContainer}>
                 <Text style={styles.statusTitle}>Porte verrouillée</Text>
                 <Text style={styles.statusSubtitle}>
-                  Dernier accès • 14:30 aujourd'hui
+                  {lastAccess ? `Dernier accès • ${lastAccess}` : 'Aucun accès récent'}
                 </Text>
               </View>
               <Badge style={styles.badgeSecure}>Sécurisé</Badge>
@@ -113,34 +145,40 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Activités récentes - Design épuré */}
+        {/* Activités récentes - données API */}
         <Card style={styles.activitiesCard}>
-          <LinearGradient
-              colors={['#ffffff', '#fafafa']}
-              style={styles.activitiesGradient}
-          >
+          <LinearGradient colors={['#ffffff', '#fafafa']} style={styles.activitiesGradient}>
             <Card.Title
                 title="Activités récentes"
-                subtitle="Aujourd'hui • 3 événements"
-                left={(props) => (
+                subtitle={recentActivities.length ? `${recentActivities.length} événement(s)` : 'Aucun événement'}
+                left={() => (
                     <View style={styles.activitiesIcon}>
                       <MaterialCommunityIcons name="history" size={24} color={COLORS.primary} />
                     </View>
                 )}
             />
             <Card.Content>
-              {[1, 2, 3].map((item) => (
-                  <View key={item} style={styles.activityItem}>
-                    <View style={styles.activityLeft}>
-                      <View style={[styles.activityDot, { backgroundColor: COLORS.success }]} />
-                      <View>
-                        <Text style={styles.activityTitle}>Accès autorisé</Text>
-                        <Text style={styles.activityUser}>Utilisateur 00{item}</Text>
+              {recentActivities.length === 0 ? (
+                <Text style={styles.emptyText}>Aucune activité récente</Text>
+              ) : (
+                recentActivities.map((h) => {
+                  const d = new Date(h.created_at);
+                  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                  const color = h.result === 'success' || h.result === 'accepted' ? COLORS.success : h.result === 'triggered' ? COLORS.secondary : COLORS.danger;
+                  return (
+                    <View key={h.id} style={styles.activityItem}>
+                      <View style={styles.activityLeft}>
+                        <View style={[styles.activityDot, { backgroundColor: color }]} />
+                        <View>
+                          <Text style={styles.activityTitle}>{getEventLabel(h)}</Text>
+                          <Text style={styles.activityUser}>{h.name || 'Système'}</Text>
+                        </View>
                       </View>
+                      <Text style={styles.activityTime}>{time}</Text>
                     </View>
-                    <Text style={styles.activityTime}>14:{30 - item}</Text>
-                  </View>
-              ))}
+                  );
+                })
+              )}
             </Card.Content>
           </LinearGradient>
         </Card>
@@ -151,32 +189,13 @@ export default function HomeScreen() {
   );
 }
 
-// Composant pour les boutons avec dégradé
-const TouchableGradient = ({ colors, style, children, onPress }: any) => (
+const TouchableGradient = ({ colors, style, children, onPress }: { colors: string[]; style: object; children: React.ReactNode; onPress?: () => void }) => (
     <TouchableOpacity onPress={onPress} style={style}>
       <LinearGradient colors={colors} style={styles.gradientButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         {children}
       </LinearGradient>
     </TouchableOpacity>
 );
-
-// Composant pour les cartes d'appareils
-const DeviceCard = ({ icon, name, status, color }: any) => (
-    <View style={styles.deviceCard}>
-      <LinearGradient
-          colors={[color, color + '80']}
-          style={styles.deviceIcon}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-      >
-        <MaterialCommunityIcons name={icon} size={28} color="white" />
-      </LinearGradient>
-      <Text style={styles.deviceName}>{name}</Text>
-      <Text style={[styles.deviceStatus, { color }]}>{status}</Text>
-    </View>
-);
-
-import { TouchableOpacity } from 'react-native';
 
 const styles = StyleSheet.create({
   container: {
@@ -419,5 +438,11 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 13,
     color: COLORS.gray,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: COLORS.gray,
+    textAlign: 'center',
+    paddingVertical: 16,
   },
 });

@@ -1,15 +1,41 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { Text, Card, Searchbar, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
-import { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { apiUrl } from '../../config/api';
+import { useState, useEffect } from 'react';
+
+type HistoryItem = {
+  id: number;
+  event_type: string;
+  result: string;
+  details: string | null;
+  created_at: string;
+  name: string | null;
+  email: string | null;
+};
 
 const { width } = Dimensions.get('window');
 
 export default function HistoryScreen() {
+    const { token } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedFilter, setSelectedFilter] = useState('all');
+    const [items, setItems] = useState<HistoryItem[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!token) return;
+        fetch(apiUrl('/api/history?limit=50'), {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => (r.ok ? r.json() : []))
+            .then(setItems)
+            .catch(() => setItems([]))
+            .finally(() => setLoading(false));
+    }, [token]);
 
     const filters = [
         { id: 'all', label: 'Tous', icon: 'format-list-bulleted' },
@@ -18,99 +44,96 @@ export default function HistoryScreen() {
         { id: 'month', label: 'Ce mois', icon: 'calendar-month' },
     ];
 
+    const statsComputed = {
+        total: items.length,
+        success: items.filter((i) => i.result === 'success' || i.result === 'accepted').length,
+        error: items.filter((i) => i.result === 'error' || i.result === 'refused').length,
+        alarm: items.filter((i) => i.event_type === 'alarm').length,
+    };
+
     const stats = [
         {
             label: 'Total accès',
-            value: '156',
+            value: String(statsComputed.total),
             icon: 'door',
             color: COLORS.primary,
             gradient: [COLORS.primary, COLORS.primaryLight]
         },
         {
             label: 'Autorisés',
-            value: '142',
+            value: String(statsComputed.success),
             icon: 'check-circle',
             color: COLORS.success,
             gradient: [COLORS.success, COLORS.successLight]
         },
         {
             label: 'Refusés',
-            value: '14',
+            value: String(statsComputed.error),
             icon: 'close-circle',
             color: COLORS.danger,
             gradient: [COLORS.danger, '#f87171']
         },
         {
             label: 'Alarmes',
-            value: '3',
+            value: String(statsComputed.alarm),
             icon: 'bell',
             color: COLORS.secondary,
             gradient: [COLORS.secondary, COLORS.secondaryLight]
         },
     ];
 
-    const recentActivities = [
-        {
-            id: 1,
-            user: 'Godelive K.',
-            type: 'Accès autorisé',
-            method: 'Empreinte digitale',
-            time: '14:30',
-            date: 'Aujourd\'hui',
-            status: 'success',
-            device: 'Porte d\'entrée',
-        },
-        {
-            id: 2,
-            user: 'Admin',
-            type: 'Accès autorisé',
-            method: 'Code PIN',
-            time: '11:15',
-            date: 'Aujourd\'hui',
-            status: 'success',
-            device: 'Porte principale',
-        },
-        {
-            id: 3,
-            user: 'Visiteur',
-            type: 'Accès refusé',
-            method: 'Empreinte inconnue',
-            time: '09:45',
-            date: 'Aujourd\'hui',
-            status: 'error',
-            device: 'Porte d\'entrée',
-        },
-        {
-            id: 4,
-            user: 'Godelive K.',
-            type: 'Alarme désactivée',
-            method: 'Application mobile',
-            time: '08:20',
-            date: 'Aujourd\'hui',
-            status: 'warning',
-            device: 'Système alarme',
-        },
-        {
-            id: 5,
-            user: 'Marie K.',
-            type: 'Accès autorisé',
-            method: 'Carte RFID',
-            time: '19:45',
-            date: 'Hier',
-            status: 'success',
-            device: 'Porte garage',
-        },
-        {
-            id: 6,
-            user: 'Inconnu',
-            type: 'Tentative forcée',
-            method: 'Alarme déclenchée',
-            time: '02:30',
-            date: 'Hier',
-            status: 'danger',
-            device: 'Fenêtre salon',
-        },
-    ];
+    const formatDate = (s: string) => {
+        const d = new Date(s);
+        const now = new Date();
+        const today = now.toDateString();
+        const ds = d.toDateString();
+        if (ds === today) return "Aujourd'hui";
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (ds === yesterday.toDateString()) return 'Hier';
+        return d.toLocaleDateString('fr-FR');
+    };
+
+    const getEventLabel = (event_type: string, result: string) => {
+        if (event_type === 'door_open') return result === 'success' ? 'Accès autorisé' : 'Accès refusé';
+        if (event_type === 'alarm') return 'Alarme déclenchée';
+        if (event_type === 'entry_request') return result === 'accepted' ? 'Demande acceptée' : 'Demande refusée';
+        return event_type;
+    };
+
+    const now = new Date();
+    const filterByDate = (h: HistoryItem) => {
+        const d = new Date(h.created_at);
+        if (selectedFilter === 'all') return true;
+        if (selectedFilter === 'today') return d.toDateString() === now.toDateString();
+        const weekAgo = new Date(now);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        if (selectedFilter === 'week') return d >= weekAgo;
+        const monthAgo = new Date(now);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        if (selectedFilter === 'month') return d >= monthAgo;
+        return true;
+    };
+
+    const recentActivities = items
+        .filter(filterByDate)
+        .map((h) => {
+            const d = new Date(h.created_at);
+            const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            return {
+                id: h.id,
+                user: h.name || h.email || 'Système',
+                type: getEventLabel(h.event_type, h.result),
+                method: h.event_type === 'door_open' ? 'Empreinte téléphone' : h.event_type,
+                time,
+                date: formatDate(h.created_at),
+                status: h.result === 'success' || h.result === 'accepted' ? 'success' : h.result === 'triggered' ? 'warning' : 'error',
+                device: 'Porte d\'entrée',
+            };
+        })
+        .filter((a) =>
+            !searchQuery || a.user.toLowerCase().includes(searchQuery.toLowerCase()) || a.type.toLowerCase().includes(searchQuery.toLowerCase())
+        );
 
     const getStatusColor = (status: string) => {
         switch(status) {
@@ -218,59 +241,19 @@ export default function HistoryScreen() {
                     </ScrollView>
                 </View>
 
-                {/* Graphique d'activité */}
-                <Card style={styles.chartCard}>
-                    <LinearGradient
-                        colors={['#ffffff', '#fafafa']}
-                        style={styles.chartGradient}
-                    >
-                        <Card.Content>
-                            <View style={styles.chartHeader}>
-                                <View>
-                                    <Text style={styles.chartTitle}>Activité hebdomadaire</Text>
-                                    <Text style={styles.chartSubtitle}>Nombre d'accès par jour</Text>
-                                </View>
-                                <TouchableOpacity>
-                                    <Text style={styles.chartLink}>Détails</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Barres du graphique */}
-                            <View style={styles.chartBars}>
-                                {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((day, index) => {
-                                    const heights = [60, 45, 80, 65, 90, 55, 40];
-                                    return (
-                                        <View key={day} style={styles.chartBarItem}>
-                                            <View style={styles.barContainer}>
-                                                <LinearGradient
-                                                    colors={[COLORS.primary, COLORS.primaryLight]}
-                                                    style={[
-                                                        styles.chartBar,
-                                                        { height: heights[index] }
-                                                    ]}
-                                                    start={{ x: 0, y: 1 }}
-                                                    end={{ x: 0, y: 0 }}
-                                                />
-                                            </View>
-                                            <Text style={styles.chartDay}>{day}</Text>
-                                        </View>
-                                    );
-                                })}
-                            </View>
-                        </Card.Content>
-                    </LinearGradient>
-                </Card>
-
                 {/* Liste des activités */}
                 <View style={styles.activitiesSection}>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Activités récentes</Text>
-                        <TouchableOpacity>
-                            <Text style={styles.sectionLink}>Voir tout</Text>
-                        </TouchableOpacity>
                     </View>
 
-                    {recentActivities.map((activity) => (
+                    {loading ? (
+                        <View style={styles.loadingWrap}>
+                            <ActivityIndicator size="large" color={COLORS.primary} />
+                        </View>
+                    ) : recentActivities.length === 0 ? (
+                        <Text style={styles.emptyText}>Aucune activité enregistrée</Text>
+                    ) : recentActivities.map((activity) => (
                         <Card key={activity.id} style={styles.activityCard}>
                             <Card.Content style={styles.activityContent}>
                                 <View style={styles.activityLeft}>
@@ -318,12 +301,6 @@ export default function HistoryScreen() {
                         </Card>
                     ))}
                 </View>
-
-                {/* Bouton charger plus */}
-                <TouchableOpacity style={styles.loadMoreButton}>
-                    <Text style={styles.loadMoreText}>Charger plus d'activités</Text>
-                    <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} />
-                </TouchableOpacity>
 
                 <View style={{ height: 90 }} />
             </ScrollView>
@@ -431,64 +408,15 @@ const styles = StyleSheet.create({
     filterTextSelected: {
         color: COLORS.white,
     },
-    chartCard: {
-        marginHorizontal: 20,
-        marginTop: 24,
-        borderRadius: 20,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-    },
-    chartGradient: {
-        borderRadius: 20,
-        padding: 5,
-    },
-    chartHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    chartTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.dark,
-    },
-    chartSubtitle: {
-        fontSize: 14,
-        color: COLORS.gray,
-        marginTop: 4,
-    },
-    chartLink: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.primary,
-    },
-    chartBars: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        height: 120,
-    },
-    chartBarItem: {
+    loadingWrap: {
+        paddingVertical: 40,
         alignItems: 'center',
     },
-    barContainer: {
-        width: 30,
-        height: 100,
-        justifyContent: 'flex-end',
-    },
-    chartBar: {
-        width: '100%',
-        borderRadius: 8,
-        minHeight: 4,
-    },
-    chartDay: {
-        fontSize: 12,
+    emptyText: {
+        fontSize: 15,
         color: COLORS.gray,
-        marginTop: 8,
+        textAlign: 'center',
+        paddingVertical: 24,
     },
     activitiesSection: {
         marginTop: 24,
@@ -579,19 +507,5 @@ const styles = StyleSheet.create({
     statusText: {
         fontSize: 12,
         fontWeight: '600',
-    },
-    loadMoreButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 16,
-        marginBottom: 8,
-        paddingVertical: 12,
-    },
-    loadMoreText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.primary,
-        marginRight: 8,
     },
 });

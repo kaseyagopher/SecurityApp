@@ -4,15 +4,18 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useEffect, useState } from 'react';
 import { Alert, Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Card, Text } from 'react-native-paper';
-import { ESP32_CONFIG, getEsp32Url } from '../../config/esp32';
+import { useAuth } from '../../contexts/AuthContext';
+import { apiUrl } from '../../config/api';
 import { COLORS } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
 
 export default function AccessScreen() {
+    const { token, user } = useAuth();
     const [isScanning, setIsScanning] = useState(false);
     const [lastStatus, setLastStatus] = useState<'success' | 'error' | null>(null);
     const [biometricAvailable, setBiometricAvailable] = useState<boolean | null>(null);
+    const [lastAccesses, setLastAccesses] = useState<{ name: string; time: string; result: string }[]>([]);
 
     useEffect(() => {
         (async () => {
@@ -21,6 +24,24 @@ export default function AccessScreen() {
             setBiometricAvailable(hasHardware && isEnrolled);
         })();
     }, []);
+
+    useEffect(() => {
+        if (!token) return;
+        fetch(apiUrl('/api/history?limit=10'), { headers: { Authorization: `Bearer ${token}` } })
+            .then((r) => (r.ok ? r.json() : []))
+            .then((data: { name: string | null; created_at: string; result: string; event_type: string }[]) => {
+                const door = data.filter((h) => h.event_type === 'door_open').slice(0, 5);
+                setLastAccesses(door.map((h) => {
+                    const d = new Date(h.created_at);
+                    return {
+                        name: h.name || 'Système',
+                        time: d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ' - Porte d\'entrée',
+                        result: h.result,
+                    };
+                }));
+            })
+            .catch(() => {});
+    }, [token]);
 
     const handleScan = async () => {
         if (!biometricAvailable) {
@@ -49,30 +70,37 @@ export default function AccessScreen() {
                 return;
             }
 
-            // Empreinte / Face ID OK → envoyer la commande à l'ESP32
-            const url = getEsp32Url(ESP32_CONFIG.endpoints.openDoor);
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), ESP32_CONFIG.timeout);
+            if (!token) {
+                setLastStatus('error');
+                Alert.alert('Session expirée', 'Reconnectez-vous.');
+                return;
+            }
 
-            const response = await fetch(url, {
+            // Empreinte OK → backend vérifie l'autorisation et envoie la commande à l'ESP32
+            const response = await fetch(apiUrl('/api/door/open'), {
                 method: 'POST',
-                signal: controller.signal,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'open' }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({}),
             });
-            clearTimeout(timeout);
+            const data = await response.json().catch(() => ({}));
 
-            if (response.ok) {
+            if (response.ok && data.success) {
                 setLastStatus('success');
             } else {
                 setLastStatus('error');
+                if (response.status === 403) {
+                    Alert.alert('Accès refusé', "Vous n'êtes pas autorisé à ouvrir la porte. Demandez à l'administrateur.");
+                } else if (response.status === 502) {
+                    Alert.alert('Porte hors ligne', 'L\'ESP32 n\'est pas joignable. Vérifiez qu\'il est allumé et sur le même réseau.');
+                }
             }
         } catch (err) {
             setLastStatus('error');
             const message = err instanceof Error ? err.message : 'Erreur réseau';
-            if (__DEV__) {
-                Alert.alert('Erreur ESP32', `Impossible de contacter la porte: ${message}. Vérifiez l'IP dans config/esp32.ts et que l'ESP32 est allumé.`);
-            }
+            Alert.alert('Erreur', `Impossible de contacter le serveur: ${message}`);
         } finally {
             setIsScanning(false);
             setTimeout(() => setLastStatus(null), 3000);
@@ -141,7 +169,7 @@ export default function AccessScreen() {
                                 {isScanning
                                     ? 'Veuillez maintenir votre doigt'
                                     : lastStatus === 'success'
-                                        ? 'Bienvenue Godelive'
+                                        ? `Bienvenue ${user?.name || 'Utilisateur'}`
                                         : lastStatus === 'error'
                                             ? 'Réessayez ou utilisez une autre méthode'
                                             : 'Utilisez l\'empreinte ou Face ID de votre téléphone'
@@ -174,59 +202,42 @@ export default function AccessScreen() {
                                 />
                             </LinearGradient>
                         </TouchableOpacity>
-
-                        {/* Méthodes alternatives */}
-                       
                     </Card.Content>
                 </LinearGradient>
             </Card>
 
-            {/* Derniers accès */}
+            {/* Derniers accès - données API */}
             <Card style={styles.historyCard}>
                 <Card.Title
                     title="Derniers accès"
-                    subtitle="Aujourd'hui"
-                    left={(props) => (
+                    subtitle={lastAccesses.length ? 'Porte d\'entrée' : 'Aucun accès'}
+                    left={() => (
                         <View style={styles.historyIcon}>
                             <MaterialCommunityIcons name="clock-outline" size={24} color={COLORS.primary} />
                         </View>
                     )}
                 />
                 <Card.Content>
-                    <View style={styles.historyItem}>
-                        <View style={styles.historyLeft}>
-                            <View style={[styles.historyDot, { backgroundColor: COLORS.success }]} />
-                            <View>
-                                <Text style={styles.historyName}>Godelive K.</Text>
-                                <Text style={styles.historyTime}>14:30 - Porte d'entrée</Text>
+                    {lastAccesses.length === 0 ? (
+                        <Text style={styles.emptyHistoryText}>Aucun accès enregistré</Text>
+                    ) : (
+                        lastAccesses.map((item, i) => (
+                            <View key={i} style={styles.historyItem}>
+                                <View style={styles.historyLeft}>
+                                    <View style={[styles.historyDot, { backgroundColor: item.result === 'success' ? COLORS.success : COLORS.danger }]} />
+                                    <View>
+                                        <Text style={styles.historyName}>{item.name}</Text>
+                                        <Text style={styles.historyTime}>{item.time}</Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.historyBadge, item.result !== 'success' && { backgroundColor: COLORS.danger + '20' }]}>
+                                    <Text style={[styles.badgeText, { color: item.result === 'success' ? COLORS.success : COLORS.danger }]}>
+                                        {item.result === 'success' ? 'Autorisé' : 'Refusé'}
+                                    </Text>
+                                </View>
                             </View>
-                        </View>
-                        <Badge style={styles.historyBadge}>Autorisé</Badge>
-                    </View>
-
-                    <View style={styles.historyItem}>
-                        <View style={styles.historyLeft}>
-                            <View style={[styles.historyDot, { backgroundColor: COLORS.success }]} />
-                            <View>
-                                <Text style={styles.historyName}>Admin</Text>
-                                <Text style={styles.historyTime}>11:15 - Porte principale</Text>
-                            </View>
-                        </View>
-                        <Badge style={styles.historyBadge}>Autorisé</Badge>
-                    </View>
-
-                    <View style={styles.historyItem}>
-                        <View style={styles.historyLeft}>
-                            <View style={[styles.historyDot, { backgroundColor: COLORS.danger }]} />
-                            <View>
-                                <Text style={styles.historyName}>Inconnu</Text>
-                                <Text style={styles.historyTime}>09:45 - Tentative échouée</Text>
-                            </View>
-                        </View>
-                        <Badge style={[styles.historyBadge, { backgroundColor: COLORS.danger + '20', color: COLORS.danger }]}>
-                            Refusé
-                        </Badge>
-                    </View>
+                        ))
+                    )}
                 </Card.Content>
             </Card>
 
@@ -235,13 +246,6 @@ export default function AccessScreen() {
         </View>
     );
 }
-
-// Composant Badge personnalisé
-const Badge = ({ style, children }: any) => (
-    <View style={[styles.badge, style]}>
-        <Text style={[styles.badgeText, { color: style?.color || COLORS.success }]}>{children}</Text>
-    </View>
-);
 
 const styles = StyleSheet.create({
     container: {
@@ -419,18 +423,20 @@ const styles = StyleSheet.create({
         color: COLORS.gray,
         marginTop: 2,
     },
-    badge: {
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 20,
-        backgroundColor: COLORS.success + '20',
-    },
     badgeText: {
         fontSize: 12,
         fontWeight: '600',
     },
     historyBadge: {
         backgroundColor: COLORS.success + '20',
-        color: COLORS.success,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 20,
+    },
+    emptyHistoryText: {
+        fontSize: 14,
+        color: COLORS.gray,
+        textAlign: 'center',
+        paddingVertical: 20,
     },
 });

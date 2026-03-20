@@ -19,9 +19,9 @@
 const char* WIFI_SSID     = "A07 de Gopher";
 const char* WIFI_PASSWORD = "wifi-1221";
 
-// Sans résistances ni transistor ? Mettez les deux à 0 : seul le servo est branché.
-#define USE_LEDS   0   // 1 = LEDs branchées (il faut des résistances 330Ω)
-#define USE_BUZZER 0   // 1 = buzzer branché (transistor ou buzzer 3.3V)
+// Mettre à 0 si les composants ne sont pas branchés.
+#define USE_LEDS   1   // 1 = LEDs branchées (résistances 330Ω obligatoires)
+#define USE_BUZZER 1   // 1 = buzzer branché (transistor NPN ou buzzer 3.3V)
 
 // Broches (adapter à votre câblage)
 const int SERVO_PIN   = 13;
@@ -30,9 +30,16 @@ const int LED_NO_PIN  = 14;   // LED rouge
 const int BUZZER_PIN  = 27;   // Buzzer (optionnel)
 
 // Angles servo (à ajuster selon votre montage)
-const int SERVO_LOCKED   = 0;   // Porte fermée
+const int SERVO_LOCKED   = 180;   // Porte fermée
 const int SERVO_UNLOCKED = 90;  // Porte ouverte
 const int DOOR_OPEN_MS   = 5000; // Temps avant de reverrouiller
+
+// Alarme persistante (reste active jusqu'à désactivation)
+bool alarmActive = false;
+unsigned long lastBeepMillis = 0;
+bool beepOn = false;
+const unsigned long BEEP_ON_MS = 300;
+const unsigned long BEEP_OFF_MS = 200;
 
 // -------- Objets --------
 WebServer server(80);
@@ -97,8 +104,34 @@ void handleOpen() {
 
 void handleStatus() {
   String wifi = WiFi.status() == WL_CONNECTED ? "connected" : "disconnected";
+  String alarm = alarmActive ? "active" : "inactive";
   server.send(200, "application/json",
-    "{\"door\":\"locked\",\"wifi\":\"" + wifi + "\"}");
+    "{\"door\":\"locked\",\"wifi\":\"" + wifi + "\",\"alarm\":\"" + alarm + "\"}");
+}
+
+void handleAlarm() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "application/json", "{\"error\":\"Method Not Allowed\"}");
+    return;
+  }
+  alarmActive = true;
+  lastBeepMillis = 0;
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Alarme activée\"}");
+}
+
+void handleAlarmStop() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "application/json", "{\"error\":\"Method Not Allowed\"}");
+    return;
+  }
+  alarmActive = false;
+#if USE_LEDS
+  digitalWrite(LED_NO_PIN, LOW);
+#endif
+#if USE_BUZZER
+  digitalWrite(BUZZER_PIN, LOW);
+#endif
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Alarme désactivée\"}");
 }
 
 void handleRoot() {
@@ -126,6 +159,9 @@ void setup() {
 
   server.on("/", HTTP_GET, handleRoot);
   server.on("/open", HTTP_POST, handleOpen);
+  server.on("/alarm", HTTP_POST, handleAlarm);
+  server.on("/alarm-stop", HTTP_POST, handleAlarmStop);
+  server.on("/alarmstop", HTTP_POST, handleAlarmStop);  // Variante sans tiret
   server.on("/status", HTTP_GET, handleStatus);
   server.onNotFound([]() {
     server.send(404, "application/json", "{\"error\":\"Not Found\"}");
@@ -137,4 +173,30 @@ void setup() {
 
 void loop() {
   server.handleClient();
+
+  // Alarme persistante : LED rouge allumée + bip répétitif jusqu'à désactivation
+  if (alarmActive) {
+#if USE_LEDS
+    digitalWrite(LED_NO_PIN, HIGH);
+#endif
+    unsigned long now = millis();
+    if (beepOn) {
+      if (now - lastBeepMillis >= BEEP_ON_MS) {
+        beepOn = false;
+        lastBeepMillis = now;
+#if USE_BUZZER
+        digitalWrite(BUZZER_PIN, LOW);
+#endif
+      } else {
+#if USE_BUZZER
+        digitalWrite(BUZZER_PIN, HIGH);
+#endif
+      }
+    } else { 
+      if (now - lastBeepMillis >= BEEP_OFF_MS) {
+        beepOn = true;
+        lastBeepMillis = now;
+      }
+    }
+  }
 }
