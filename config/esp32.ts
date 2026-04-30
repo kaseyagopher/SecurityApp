@@ -6,7 +6,7 @@
 export const ESP32_CONFIG = {
   /** URL de base de l'ESP32 (ex: http://192.168.1.100) */
   baseUrl: __DEV__
-    ? 'http://10.73.133.47'  // En dev, changez selon votre réseau
+    ? 'http://10.122.35.47'  // En dev, changez selon votre réseau
     : 'http://192.168.1.100', // En prod, même IP ou hostname
 
   /** Timeout des requêtes vers l'ESP32 (ms) */

@@ -7,7 +7,7 @@ import { db } from './db.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'securityapp-secret-change-in-prod';
-const ESP32_URL = process.env.ESP32_URL || 'http://10.73.133.47';
+const ESP32_URL = process.env.ESP32_URL || 'http://10.122.35.47';
 const MAX_FAILED_ATTEMPTS = 3;
 
 // Compteur de tentatives refusées par utilisateur (reset sur succès ou après 5 min)
@@ -260,4 +260,5 @@ app.get('/api/alarm/status', auth, async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`SecurityApp API sur http://localhost:${PORT}`);
+  console.log(`ESP32 URL utilisée: ${ESP32_URL}`);
 });

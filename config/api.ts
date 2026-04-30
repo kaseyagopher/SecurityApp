@@ -3,7 +3,7 @@
  * Sur téléphone physique : utilisez l'IP de votre machine (ex: 192.168.1.x)
  */
 const getBaseUrl = () => {
-  return 'http://10.73.133.108:3001';
+  return 'http://10.122.35.108:3001';
 };
 
 export const API_CONFIG = {
