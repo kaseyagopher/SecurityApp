@@ -1,13 +1,13 @@
-import express from 'express';
-import cors from 'cors';
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import cors from 'cors';
+import express from 'express';
+import jwt from 'jsonwebtoken';
 import { db } from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'securityapp-secret-change-in-prod';
-const ESP32_URL = process.env.ESP32_URL || 'http://10.73.133.47';
+const ESP32_URL = process.env.ESP32_URL || 'http://10.83.10.154';
 const MAX_FAILED_ATTEMPTS = 3;
 
 // Compteur de tentatives refusées par utilisateur (reset sur succès ou après 5 min)
