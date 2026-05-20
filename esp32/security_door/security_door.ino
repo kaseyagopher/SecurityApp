@@ -16,8 +16,8 @@
 #include <ESP32Servo.h>
 
 // -------- À CONFIGURER --------
-const char* WIFI_SSID     = "A07 de Gopher";
-const char* WIFI_PASSWORD = "wifi-1221";
+const char* WIFI_SSID     = "TECHNO POP 10C";
+const char* WIFI_PASSWORD = "live.net";
 
 // Mettre à 0 si les composants ne sont pas branchés.
 #define USE_LEDS   1   // 1 = LEDs branchées (résistances 330Ω obligatoires)
