@@ -1,16 +1,31 @@
-import { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Text, TextInput, Button } from 'react-native-paper';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { COLORS } from '../../constants/theme';
+import { useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { Button, Text, TextInput } from 'react-native-paper';
+import { MockBanner } from '../../components/ui/MockBanner';
+import { COLORS, RADIUS, SPACING } from '../../constants/theme';
+import { USE_MOCKS } from '../../config/app';
 import { useAuth } from '../../contexts/AuthContext';
+
+const ADMIN_ACCOUNT = {
+  label: 'Admin',
+  email: 'admin@securityapp.local',
+  password: 'Admin123!',
+};
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(USE_MOCKS ? ADMIN_ACCOUNT.email : '');
+  const [password, setPassword] = useState(USE_MOCKS ? ADMIN_ACCOUNT.password : '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -23,37 +38,44 @@ export default function LoginScreen() {
     setLoading(true);
     const result = await login(email, password);
     setLoading(false);
-    if (result.ok) {
-      router.replace('/(tabs)');
-    } else {
-      setError(result.error || 'Erreur de connexion');
-    }
+    if (result.ok) router.replace('/(tabs)');
+    else setError(result.error || 'Erreur');
   };
 
   return (
-    <LinearGradient
-      colors={[COLORS.primary, COLORS.primaryLight]}
-      style={styles.gradient}
-    >
+    <LinearGradient colors={[...COLORS.headerGradient]} style={styles.gradient}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboard}
+        style={styles.flex}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <MaterialCommunityIcons name="shield-lock" size={64} color="white" />
-            <Text style={styles.title}>SecurityApp</Text>
-            <Text style={styles.subtitle}>Contrôle d'accès domestique</Text>
+          <View style={styles.brand}>
+            <View style={styles.logo}>
+              <MaterialCommunityIcons name="shield-lock" size={40} color={COLORS.white} />
+            </View>
+            <Text style={styles.brandTitle}>SecurityApp</Text>
+            <Text style={styles.brandSub}>Administration du domicile</Text>
           </View>
+
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Connexion</Text>
+            <Text style={styles.cardTitle}>Connexion administrateur</Text>
+            <Text style={styles.adminNote}>
+              Seul le compte administrateur peut utiliser l&apos;application. Les personnes
+              autorisées passent par le capteur à la porte.
+            </Text>
+            {USE_MOCKS ? <MockBanner /> : (
+              <Text style={styles.serverHint}>
+                Serveur : npm start dans server/ — même Wi‑Fi que le téléphone
+              </Text>
+            )}
+
             <TextInput
-              label="Email"
+              label="Email admin"
               value={email}
               onChangeText={setEmail}
+              mode="outlined"
               keyboardType="email-address"
               autoCapitalize="none"
-              mode="outlined"
               style={styles.input}
             />
             <TextInput
@@ -64,17 +86,26 @@ export default function LoginScreen() {
               mode="outlined"
               style={styles.input}
             />
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
-            <Button
-              mode="contained"
-              onPress={handleLogin}
-              loading={loading}
-              disabled={loading}
-              style={styles.btn}
-            >
+
+            <Button mode="contained" onPress={handleLogin} loading={loading} style={styles.btn}>
               Se connecter
             </Button>
-            <Text style={styles.hint}>Admin par défaut : admin@securityapp.local / Admin123!</Text>
+
+            <View style={styles.demo}>
+              <Text style={styles.demoTitle}>Compte administrateur</Text>
+              <Pressable
+                style={styles.demoChip}
+                onPress={() => {
+                  setEmail(ADMIN_ACCOUNT.email);
+                  setPassword(ADMIN_ACCOUNT.password);
+                  setError('');
+                }}
+              >
+                <Text style={styles.demoChipText}>{ADMIN_ACCOUNT.label}</Text>
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -84,24 +115,50 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
-  keyboard: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: 80 },
-  header: { alignItems: 'center', marginBottom: 32 },
-  title: { fontSize: 28, fontWeight: 'bold', color: 'white', marginTop: 16 },
-  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.9)', marginTop: 8 },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 24,
-    padding: 24,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1, padding: SPACING.lg, paddingTop: 72, justifyContent: 'center' },
+  brand: { alignItems: 'center', marginBottom: SPACING.xl },
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
   },
-  cardTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  input: { marginBottom: 12 },
-  error: { color: COLORS.danger, marginBottom: 12, textAlign: 'center' },
-  btn: { marginTop: 8 },
-  hint: { fontSize: 12, color: COLORS.gray, marginTop: 16, textAlign: 'center' },
+  brandTitle: { fontSize: 28, fontWeight: '800', color: COLORS.white },
+  brandSub: { fontSize: 14, color: 'rgba(255,255,255,0.9)', marginTop: 4 },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  cardTitle: { fontSize: 20, fontWeight: '700', color: COLORS.text, textAlign: 'center', marginBottom: SPACING.xs },
+  adminNote: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: SPACING.xs,
+  },
+  input: { backgroundColor: COLORS.surface },
+  error: { color: COLORS.danger, textAlign: 'center', fontSize: 14 },
+  btn: { marginTop: SPACING.sm },
+  demo: { marginTop: SPACING.md, gap: SPACING.sm, alignItems: 'center' },
+  demoTitle: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center' },
+  demoChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.primaryMuted,
+    borderRadius: RADIUS.full,
+  },
+  demoChipText: { color: COLORS.primaryDark, fontWeight: '600', fontSize: 13 },
+  serverHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.sm,
+  },
 });

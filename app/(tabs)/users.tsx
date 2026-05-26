@@ -1,181 +1,204 @@
-import { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { Text, Card, Button, TextInput, List, FAB } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, Text, TextInput } from 'react-native-paper';
+import { Screen } from '../../components/layout/Screen';
+import { AppCard } from '../../components/ui/Card';
+import { MockBanner } from '../../components/ui/MockBanner';
+import { StatusBadge } from '../../components/ui/StatusBadge';
+import { COLORS, SPACING } from '../../constants/theme';
+import type { AppUser } from '../../mocks/types';
+import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { apiUrl } from '../../config/api';
-import { COLORS } from '../../constants/theme';
-
-type User = { id: number; email: string; name: string; role: string; is_authorized: number };
-type AuthorizedUser = { id: number; email: string; name: string; created_at: string };
 
 export default function UsersScreen() {
-  const { token } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
-  const [authorized, setAuthorized] = useState<AuthorizedUser[]>([]);
+  const { user } = useAuth();
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
-  const [newPassword, setNewPassword] = useState('');
 
-  const fetchData = async () => {
-    if (!token) return;
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const [uRes, aRes] = await Promise.all([
-        fetch(apiUrl('/api/users'), { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(apiUrl('/api/authorized-users'), { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
-      if (uRes.ok) setUsers(await uRes.json());
-      if (aRes.ok) setAuthorized(await aRes.json());
-    } catch {
-      Alert.alert('Erreur', 'Impossible de charger les données');
+      setUsers(await api.getUsers());
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [token]);
-
-  const addUser = async () => {
-    if (!newEmail || !newName || !newPassword) {
-      Alert.alert('Erreur', 'Remplissez tous les champs');
+    if (user?.role !== 'admin') {
+      router.back();
       return;
     }
-    try {
-      const res = await fetch(apiUrl('/api/users'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ email: newEmail, name: newName, password: newPassword }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        Alert.alert('Erreur', data.error || 'Échec');
-        return;
-      }
-      setShowAdd(false);
-      setNewEmail('');
-      setNewName('');
-      setNewPassword('');
-      fetchData();
-    } catch {
-      Alert.alert('Erreur', 'Erreur réseau');
-    }
+    load();
+  }, [user, load]);
+
+  const toggleAuth = async (u: AppUser) => {
+    await api.setUserAuthorized(u.id, !u.isAuthorized);
+    load();
   };
 
-  const toggleAuthorized = async (userId: number, isAuthorized: boolean) => {
-    try {
-      if (isAuthorized) {
-        await fetch(apiUrl(`/api/authorized-users/${userId}`), {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } else {
-        await fetch(apiUrl('/api/authorized-users'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ user_id: userId }),
-        });
-      }
-      fetchData();
-    } catch {
-      Alert.alert('Erreur', 'Erreur réseau');
+  const deletePerson = (u: AppUser) => {
+    const msg =
+      u.fingerprintSlot != null
+        ? `${u.name} sera supprimée et son empreinte (slot #${u.fingerprintSlot}) retirée du capteur.`
+        : `Supprimer ${u.name} de la liste ?`;
+    Alert.alert('Supprimer la personne', msg, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.deleteUser(u.id);
+            load();
+          } catch (e) {
+            Alert.alert('Erreur', e instanceof Error ? e.message : 'Suppression impossible');
+          }
+        },
+      },
+    ]);
+  };
+
+  const removeFingerprint = (u: AppUser) => {
+    Alert.alert('Supprimer l\'empreinte', `Retirer l\'empreinte de ${u.name} ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          await api.deleteFingerprint(u.id);
+          load();
+        },
+      },
+    ]);
+  };
+
+  const addPerson = async () => {
+    const name = newName.trim();
+    if (!name) {
+      Alert.alert('Erreur', 'Indiquez un nom');
+      return;
     }
+    await api.createUser({ name });
+    setShowAdd(false);
+    setNewName('');
+    load();
   };
 
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={[COLORS.primary, COLORS.primaryLight]}
-        style={styles.header}
-      >
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color="white" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Utilisateurs autorisés</Text>
-        <Text style={styles.subtitle}>Gérer l'accès à la porte</Text>
-      </LinearGradient>
+    <Screen
+      title="Personnes"
+      subtitle="Qui peut accéder au domicile"
+      headerRight={
+        <Pressable onPress={() => router.back()} hitSlop={12}>
+          <MaterialCommunityIcons name="close" size={26} color={COLORS.white} />
+        </Pressable>
+      }
+    >
+      <MockBanner />
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {showAdd && (
-          <Card style={styles.card}>
-            <Card.Title title="Nouvel utilisateur" />
-            <Card.Content>
-              <TextInput label="Nom" value={newName} onChangeText={setNewName} mode="outlined" style={styles.input} />
-              <TextInput label="Email" value={newEmail} onChangeText={setNewEmail} keyboardType="email-address" mode="outlined" style={styles.input} />
-              <TextInput label="Mot de passe" value={newPassword} onChangeText={setNewPassword} secureTextEntry mode="outlined" style={styles.input} />
-              <View style={styles.row}>
-                <Button onPress={() => setShowAdd(false)}>Annuler</Button>
-                <Button mode="contained" onPress={addUser}>Ajouter</Button>
+      {showAdd ? (
+        <AppCard title="Nouvelle personne">
+          <Text style={styles.hint}>
+            Seul le nom est nécessaire. Il apparaîtra dans l&apos;historique lors des accès.
+          </Text>
+          <TextInput label="Nom" value={newName} onChangeText={setNewName} mode="outlined" style={styles.input} />
+          <View style={styles.row}>
+            <Button onPress={() => setShowAdd(false)}>Annuler</Button>
+            <Button mode="contained" onPress={addPerson}>
+              Ajouter
+            </Button>
+          </View>
+        </AppCard>
+      ) : (
+        <Button mode="contained-tonal" icon="account-plus" onPress={() => setShowAdd(true)}>
+          Ajouter une personne
+        </Button>
+      )}
+
+      {loading ? (
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 24 }} />
+      ) : (
+        users
+          .filter((u) => u.role !== 'admin')
+          .map((u) => (
+            <AppCard key={u.id}>
+              <View style={styles.userRow}>
+                <View style={styles.userAvatar}>
+                  <Text style={styles.userAvatarText}>{u.name.slice(0, 2).toUpperCase()}</Text>
+                </View>
+                <View style={styles.userBody}>
+                  <Text style={styles.userName}>{u.name}</Text>
+                  <View style={styles.badges}>
+                    <StatusBadge
+                      label={u.isAuthorized ? 'Autorisé' : 'Non autorisé'}
+                      tone={u.isAuthorized ? 'success' : 'neutral'}
+                    />
+                    {u.fingerprintSlot != null ? (
+                      <StatusBadge label={`Empreinte #${u.fingerprintSlot}`} tone="info" />
+                    ) : (
+                      <StatusBadge label="Sans empreinte" tone="warning" />
+                    )}
+                  </View>
+                </View>
               </View>
-            </Card.Content>
-          </Card>
-        )}
-
-        <Card style={styles.card}>
-          <Card.Title
-            title="Utilisateurs"
-            right={(props) => (
-              <Button onPress={() => setShowAdd(!showAdd)} {...props}>
-                {showAdd ? 'Masquer' : '+ Ajouter'}
-              </Button>
-            )}
-          />
-          <Card.Content>
-            {loading ? (
-              <Text>Chargement...</Text>
-            ) : (
-              users.filter(u => u.role !== 'admin').map((u) => (
-                <List.Item
-                  key={u.id}
-                  title={u.name}
-                  description={u.email}
-                  left={() => (
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{u.name.slice(0, 2).toUpperCase()}</Text>
-                    </View>
-                  )}
-                  right={() => (
-                    <Button
-                      mode={u.is_authorized ? 'contained-tonal' : 'contained'}
-                      onPress={() => toggleAuthorized(u.id, !!u.is_authorized)}
-                    >
-                      {u.is_authorized ? 'Autorisé' : 'Autoriser'}
-                    </Button>
-                  )}
-                />
-              ))
-            )}
-          </Card.Content>
-        </Card>
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
-    </View>
+              <View style={styles.actions}>
+                <Button mode="outlined" compact onPress={() => toggleAuth(u)}>
+                  {u.isAuthorized ? 'Révoquer accès' : 'Autoriser'}
+                </Button>
+                {u.fingerprintSlot == null ? (
+                  <Button
+                    mode="contained"
+                    compact
+                    icon="fingerprint"
+                    onPress={() =>
+                      router.push({ pathname: '/(tabs)/enroll', params: { userId: String(u.id) } } as never)
+                    }
+                  >
+                    Enregistrer
+                  </Button>
+                ) : (
+                  <Button mode="text" compact textColor={COLORS.danger} onPress={() => removeFingerprint(u)}>
+                    Retirer empreinte
+                  </Button>
+                )}
+                <Button
+                  mode="text"
+                  compact
+                  icon="delete-outline"
+                  textColor={COLORS.textMuted}
+                  onPress={() => deletePerson(u)}
+                >
+                  Supprimer
+                </Button>
+              </View>
+            </AppCard>
+          ))
+      )}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingTop: 50, paddingBottom: 24, paddingHorizontal: 20 },
-  backBtn: { position: 'absolute', top: 50, left: 20, zIndex: 1 },
-  title: { fontSize: 24, fontWeight: 'bold', color: 'white' },
-  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.9)', marginTop: 4 },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16 },
-  card: { marginBottom: 16 },
-  input: { marginBottom: 12 },
+  hint: { fontSize: 13, color: COLORS.textSecondary, marginBottom: SPACING.sm },
+  input: { marginBottom: SPACING.sm },
   row: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary + '30', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  avatarText: { fontSize: 14, fontWeight: 'bold', color: COLORS.primary },
+  userRow: { flexDirection: 'row', gap: SPACING.md },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarText: { fontWeight: '700', color: COLORS.primaryDark },
+  userBody: { flex: 1, gap: 4 },
+  userName: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: SPACING.md },
 });

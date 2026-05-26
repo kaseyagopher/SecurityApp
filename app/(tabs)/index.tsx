@@ -1,448 +1,228 @@
-import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
-import { Text, Card, Avatar, Badge } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS } from '../../constants/theme';
 import { Link } from 'expo-router';
+import { Routes } from '../../lib/routes';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Button, Text } from 'react-native-paper';
+import { Screen } from '../../components/layout/Screen';
+import { ActivityRow } from '../../components/ui/ActivityRow';
+import { AppCard } from '../../components/ui/Card';
+import { MockBanner } from '../../components/ui/MockBanner';
+import { QuickTile } from '../../components/ui/QuickTile';
+import { StatusBadge } from '../../components/ui/StatusBadge';
+import { COLORS, RADIUS, SPACING } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
-import { apiUrl } from '../../config/api';
-import { useEffect, useState } from 'react';
-import { TouchableOpacity } from 'react-native';
+import { useSystem } from '../../contexts/SystemContext';
 
-const { width } = Dimensions.get('window');
-
-type HistoryItem = { id: number; event_type: string; result: string; name: string | null; created_at: string };
+function doorLabel(state: string) {
+  if (state === 'unlocked') return { label: 'Ouverte', tone: 'warning' as const };
+  if (state === 'unlocking') return { label: 'Ouverture…', tone: 'info' as const };
+  return { label: 'Verrouillée', tone: 'success' as const };
+}
 
 export default function HomeScreen() {
-  const { user, token } = useAuth();
-  const displayName = user?.name?.split(' ')[0] || 'Utilisateur';
-  const [recentActivities, setRecentActivities] = useState<HistoryItem[]>([]);
-  const [lastAccess, setLastAccess] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { door, alarm, history, loading, stopAlarm, refresh } = useSystem();
+  const [stopping, setStopping] = useState(false);
+  const firstName = user?.name?.split(' ')[0] ?? 'Admin';
+  const doorInfo = door ? doorLabel(door.state) : { label: '—', tone: 'neutral' as const };
+  const active = alarm?.active ?? false;
 
-  useEffect(() => {
-    if (!token) return;
-    fetch(apiUrl('/api/history?limit=5'), { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: HistoryItem[]) => {
-        setRecentActivities(data);
-        const last = data.find((h) => h.event_type === 'door_open' && h.result === 'success');
-        if (last) {
-          const d = new Date(last.created_at);
-          setLastAccess(d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ' aujourd\'hui');
-        }
-      })
-      .catch(() => {});
-  }, [token]);
-
-  const getEventLabel = (h: HistoryItem) => {
-    if (h.event_type === 'door_open') return h.result === 'success' ? 'Accès autorisé' : 'Accès refusé';
-    if (h.event_type === 'alarm') return 'Alarme déclenchée';
-    return h.event_type;
+  const onStopAlarm = async () => {
+    setStopping(true);
+    try {
+      await stopAlarm();
+      await refresh({ silent: true });
+    } finally {
+      setStopping(false);
+    }
   };
 
   return (
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-
-        {/* Header avec dégradé */}
-        <LinearGradient
-            colors={[COLORS.primary, COLORS.primaryLight]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.headerGradient}
-        >
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.greeting}>Bonjour,</Text>
-              <Text style={styles.userName}>{displayName} 👋</Text>
-            </View>
-            <Avatar.Text
-                size={55}
-                label={(user?.name ?? 'U').slice(0, 2).toUpperCase()}
-                style={styles.avatar}
-                labelStyle={styles.avatarLabel}
-            />
-          </View>
-
-          {/* Solde ou statut principal */}
-          <View style={styles.balanceContainer}>
-            <Text style={styles.balanceLabel}>Système de sécurité</Text>
-            <View style={styles.balanceRow}>
-              <MaterialCommunityIcons name="shield-check" size={28} color="white" />
-              <Text style={styles.balanceAmount}>ACTIF</Text>
-            </View>
-          </View>
-        </LinearGradient>
-
-        {/* Statut de la porte - Carte moderne */}
-        <Card style={styles.statusCard}>
-          <LinearGradient
-              colors={['#ffffff', '#f8f9fa']}
-              style={styles.statusGradient}
-          >
-            <Card.Content style={styles.statusContent}>
-              <View style={styles.statusIconContainer}>
-                <LinearGradient
-                    colors={[COLORS.primary, COLORS.primaryLight]}
-                    style={styles.statusIcon}
-                >
-                  <MaterialCommunityIcons name="lock" size={30} color="white" />
-                </LinearGradient>
-              </View>
-              <View style={styles.statusTextContainer}>
-                <Text style={styles.statusTitle}>Porte verrouillée</Text>
-                <Text style={styles.statusSubtitle}>
-                  {lastAccess ? `Dernier accès • ${lastAccess}` : 'Aucun accès récent'}
-                </Text>
-              </View>
-              <Badge style={styles.badgeSecure}>Sécurisé</Badge>
-            </Card.Content>
-          </LinearGradient>
-        </Card>
-
-        {/* Actions rapides - Design moderne */}
-        <View style={styles.quickActionsSection}>
-          <Text style={styles.sectionTitle}>Actions rapides</Text>
-          <View style={styles.quickActionsGrid}>
-            <Link href="/(tabs)/access" asChild>
-              <TouchableGradient
-                  colors={[COLORS.primary, COLORS.primaryLight]}
-                  style={styles.quickActionItem}
-              >
-                <MaterialCommunityIcons name="fingerprint" size={32} color="white" />
-                <Text style={styles.quickActionText}>Accès</Text>
-              </TouchableGradient>
-            </Link>
-
-            <Link href="/(tabs)/alarm" asChild>
-              <TouchableGradient
-                  colors={[COLORS.secondary, '#fbbf24']}
-                  style={styles.quickActionItem}
-              >
-                <MaterialCommunityIcons name="bell" size={32} color="white" />
-                <Text style={styles.quickActionText}>Alarme</Text>
-              </TouchableGradient>
-            </Link>
-
-            <Link href="/(tabs)/history" asChild>
-              <TouchableGradient
-                  colors={[COLORS.success, '#34d399']}
-                  style={styles.quickActionItem}
-              >
-                <MaterialCommunityIcons name="history" size={32} color="white" />
-                <Text style={styles.quickActionText}>Historique</Text>
-              </TouchableGradient>
-            </Link>
-
-            <Link href="/(tabs)/profile" asChild>
-              <TouchableGradient
-                  colors={[COLORS.info, '#60a5fa']}
-                  style={styles.quickActionItem}
-              >
-                <MaterialCommunityIcons name="account" size={32} color="white" />
-                <Text style={styles.quickActionText}>Profil</Text>
-              </TouchableGradient>
-            </Link>
-          </View>
+    <Screen
+      title={`Bonjour, ${firstName}`}
+      subtitle="Vue d'ensemble du domicile"
+      headerRight={
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{(user?.name ?? 'A').slice(0, 2).toUpperCase()}</Text>
         </View>
+      }
+    >
+      <MockBanner />
 
-        {/* Activités récentes - données API */}
-        <Card style={styles.activitiesCard}>
-          <LinearGradient colors={['#ffffff', '#fafafa']} style={styles.activitiesGradient}>
-            <Card.Title
-                title="Activités récentes"
-                subtitle={recentActivities.length ? `${recentActivities.length} événement(s)` : 'Aucun événement'}
-                left={() => (
-                    <View style={styles.activitiesIcon}>
-                      <MaterialCommunityIcons name="history" size={24} color={COLORS.primary} />
-                    </View>
-                )}
+      {loading && !door ? (
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 24 }} />
+      ) : (
+        <>
+          <AppCard accent>
+            <View style={styles.doorRow}>
+              <View style={styles.doorIcon}>
+                <MaterialCommunityIcons
+                  name={door?.state === 'unlocked' ? 'door-open' : 'door-closed-lock'}
+                  size={32}
+                  color={COLORS.primary}
+                />
+              </View>
+              <View style={styles.doorBody}>
+                <Text style={styles.doorTitle}>Porte d'entrée</Text>
+                <StatusBadge label={doorInfo.label} tone={doorInfo.tone} />
+                {door?.lastAccessAt ? (
+                  <Text style={styles.doorMeta}>
+                    Dernier accès : {door.lastAccessBy} ·{' '}
+                    {new Date(door.lastAccessAt).toLocaleTimeString('fr-FR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </AppCard>
+
+          {active ? (
+            <AppCard accent>
+              <View style={styles.alarmCard}>
+                <View style={[styles.alarmIconWrap, styles.alarmIconWrapActive]}>
+                  <MaterialCommunityIcons name="bell-ring" size={32} color={COLORS.danger} />
+                </View>
+                <View style={styles.alarmBody}>
+                  <Text style={styles.alarmTitle}>Alarme active</Text>
+                  <Text style={styles.alarmDesc}>
+                    {alarm?.reason ??
+                      "Déclenchée après 3 tentatives refusées. Coupez-la depuis le téléphone avant d'intervenir."}
+                  </Text>
+                  {alarm?.triggeredAt ? (
+                    <Text style={styles.alarmTime}>
+                      Depuis{' '}
+                      {new Date(alarm.triggeredAt).toLocaleTimeString('fr-FR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+              <Button
+                mode="contained"
+                buttonColor={COLORS.success}
+                icon="bell-off"
+                loading={stopping}
+                onPress={onStopAlarm}
+                style={styles.alarmBtn}
+              >
+                Couper l&apos;alarme à distance
+              </Button>
+              <Link href={Routes.alarm} asChild>
+                <Pressable style={styles.alarmLink}>
+                  <Text style={styles.alarmLinkText}>Détails alarme</Text>
+                </Pressable>
+              </Link>
+            </AppCard>
+          ) : null}
+
+          <View style={styles.quickGrid}>
+            <QuickTile
+              href={Routes.door}
+              icon="fingerprint"
+              label="Porte"
+              subtitle="Capteur & ouverture"
+              iconBg={COLORS.primaryMuted}
+              iconColor={COLORS.primaryDark}
             />
-            <Card.Content>
-              {recentActivities.length === 0 ? (
-                <Text style={styles.emptyText}>Aucune activité récente</Text>
-              ) : (
-                recentActivities.map((h) => {
-                  const d = new Date(h.created_at);
-                  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                  const color = h.result === 'success' || h.result === 'accepted' ? COLORS.success : h.result === 'triggered' ? COLORS.secondary : COLORS.danger;
-                  return (
-                    <View key={h.id} style={styles.activityItem}>
-                      <View style={styles.activityLeft}>
-                        <View style={[styles.activityDot, { backgroundColor: color }]} />
-                        <View>
-                          <Text style={styles.activityTitle}>{getEventLabel(h)}</Text>
-                          <Text style={styles.activityUser}>{h.name || 'Système'}</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.activityTime}>{time}</Text>
-                    </View>
-                  );
-                })
-              )}
-            </Card.Content>
-          </LinearGradient>
-        </Card>
+            <QuickTile
+              href={Routes.history}
+              icon="history"
+              label="Historiques"
+              subtitle="Qui est passé"
+              iconBg={COLORS.accentMuted}
+              iconColor={COLORS.accent}
+            />
+            <QuickTile
+              href={Routes.users}
+              icon="account-group"
+              label="Personnes"
+              subtitle="Gérer les accès"
+              iconBg={COLORS.warningMuted}
+              iconColor={COLORS.warning}
+            />
+            <QuickTile
+              href={Routes.alarm}
+              icon={active ? 'bell-ring' : 'shield-alert'}
+              label="Alarme"
+              subtitle={active ? 'Sonnerie en cours' : 'Après 3 refus'}
+              iconBg={COLORS.dangerMuted}
+              iconColor={COLORS.danger}
+              borderColor={COLORS.danger + '40'}
+              active={active}
+              activeLabel="ON"
+            />
+          </View>
 
-        {/* Espace en bas pour la tab bar */}
-        <View style={{ height: 90 }} />
-      </ScrollView>
+          <AppCard title="Activité récente" subtitle={`${history.length} événements`}>
+            {history.length === 0 ? (
+              <Text style={styles.empty}>Aucune activité</Text>
+            ) : (
+              history.slice(0, 5).map((e) => <ActivityRow key={e.id} event={e} compact />)
+            )}
+            <Link href={Routes.history} asChild>
+              <Pressable style={styles.seeAll}>
+                <Text style={styles.seeAllText}>Voir tout l&apos;historique</Text>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+              </Pressable>
+            </Link>
+          </AppCard>
+        </>
+      )}
+    </Screen>
   );
 }
 
-const TouchableGradient = ({ colors, style, children, onPress }: { colors: string[]; style: object; children: React.ReactNode; onPress?: () => void }) => (
-    <TouchableOpacity onPress={onPress} style={style}>
-      <LinearGradient colors={colors} style={styles.gradientButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        {children}
-      </LinearGradient>
-    </TouchableOpacity>
-);
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f7fa',
-  },
-  headerGradient: {
-    paddingTop: 60,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  greeting: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-    marginBottom: 4,
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-  },
   avatar: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 2,
-    borderColor: 'white',
-  },
-  avatarLabel: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  balanceContainer: {
-    marginTop: 10,
-  },
-  balanceLabel: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 5,
-  },
-  balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  balanceAmount: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  statusCard: {
-    marginTop: -20,
-    marginHorizontal: 20,
-    borderRadius: 20,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-  },
-  statusGradient: {
-    borderRadius: 20,
-    padding: 5,
-  },
-  statusContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  statusIconContainer: {
-    marginRight: 16,
-  },
-  statusIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusTextContainer: {
-    flex: 1,
-  },
-  statusTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-    marginBottom: 4,
-  },
-  statusSubtitle: {
-    fontSize: 14,
-    color: COLORS.gray,
-  },
-  badgeSecure: {
-    backgroundColor: COLORS.success + '20',
-    color: COLORS.success,
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: 12,
-  },
-  quickActionsSection: {
-    marginTop: 30,
-    paddingHorizontal: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-    marginBottom: 16,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  quickActionItem: {
-    width: (width - 60) / 2,
-    height: 110,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  gradientButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  quickActionText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  devicesSection: {
-    marginTop: 30,
-    paddingLeft: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingRight: 20,
-    marginBottom: 16,
-  },
-  seeAll: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  devicesScroll: {
-    flexDirection: 'row',
-  },
-  deviceCard: {
-    width: 140,
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  deviceIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  deviceName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.dark,
-    marginBottom: 4,
-  },
-  deviceStatus: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  activitiesCard: {
-    marginTop: 30,
-    marginHorizontal: 20,
-    borderRadius: 20,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-  },
-  activitiesGradient: {
-    borderRadius: 20,
-    padding: 5,
-  },
-  activitiesIcon: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.primary + '10',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activityItem: {
+  avatarText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
+  doorRow: { flexDirection: 'row', gap: SPACING.md },
+  doorIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doorBody: { flex: 1, gap: 6 },
+  doorTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  doorMeta: { fontSize: 13, color: COLORS.textSecondary },
+  alarmCard: { flexDirection: 'row', gap: SPACING.md, alignItems: 'flex-start' },
+  alarmIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  alarmIconWrapActive: { backgroundColor: COLORS.dangerMuted },
+  alarmBody: { flex: 1, gap: 4 },
+  alarmTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+  alarmDesc: { fontSize: 14, color: COLORS.textSecondary, lineHeight: 20 },
+  alarmTime: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  alarmBtn: { marginTop: SPACING.md },
+  alarmLink: { alignItems: 'center', marginTop: SPACING.sm },
+  alarmLinkText: { color: COLORS.primary, fontWeight: '600', fontSize: 13 },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  empty: { textAlign: 'center', color: COLORS.textMuted, paddingVertical: SPACING.md },
+  seeAll: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    justifyContent: 'center',
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
   },
-  activityLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  activityDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  activityTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.dark,
-  },
-  activityUser: {
-    fontSize: 13,
-    color: COLORS.gray,
-    marginTop: 2,
-  },
-  activityTime: {
-    fontSize: 13,
-    color: COLORS.gray,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.gray,
-    textAlign: 'center',
-    paddingVertical: 16,
-  },
+  seeAllText: { color: COLORS.primary, fontWeight: '600' },
 });

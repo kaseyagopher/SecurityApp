@@ -12,12 +12,97 @@ Schéma de branchement pour **ESP32**, **servo**, **LEDs** et **buzzer 5 V**.
 | LED verte      | **GPIO 12**  | -                      | Avec résistance 330 Ω  |
 | LED rouge      | **GPIO 14**  | -                      | Avec résistance 330 Ω  |
 | Buzzer         | **GPIO 27**  | -                      | Via transistor (voir plus bas) |
+| Capteur R03 (TX) | → **GPIO 16** (RX2) | Jaune / Blanc | Fil **TX du capteur** vers **RX ESP32** |
+| Capteur R03 (RX) | ← **GPIO 17** (TX2) | Vert          | Fil **RX du capteur** vers **TX ESP32** |
+| Capteur R03 (VCC) | **3,3 V**   | Rouge         | **Pas le 5 V** (voir § capteur) |
+| Capteur R03 (GND) | **GND**     | Noir          | Masse commune |
 
 Toutes les **GND** des composants vont au **GND** de l’ESP32 (ou d’une alimentation commune).
 
 ---
 
-## 0. Je n'ai que les composants (pas de résistances ni transistor)
+## 0. Capteur d’empreinte R03 (R307 / R503 — priorité)
+
+Modules type **R03, R307, R503** : communication **UART** (série), vitesse par défaut **57600 baud**.
+
+### Connecteur 6 fils (ton module : GND, RX, TX, 3V3, T-OUT, T-3V3)
+
+| Fil sur le capteur | Rôle | Brancher sur l’ESP32 |
+|--------------------|------|----------------------|
+| **GND** | Masse | **GND** |
+| **3V3** | Alimentation principale | **3V3** |
+| **TX** | Le capteur **envoie** des données | **GPIO 16** (RX2) — on croise |
+| **RX** | Le capteur **reçoit** des données | **GPIO 17** (TX2) — on croise |
+| **T-3V3** | Alimentation du circuit **détection doigt** (touch) | **3V3** (même broche que 3V3, ou même rail 3,3 V) |
+| **T-OUT** | Sortie « doigt détecté » (signal digital) | **Optionnel** : **GPIO 4** plus tard ; **laisser vide** pour le 1er test |
+
+**Règle UART (obligatoire) :** les fils **TX et RX se croisent** :
+
+- **TX du capteur** → **GPIO 16** (RX de l’ESP32)
+- **RX du capteur** → **GPIO 17** (TX de l’ESP32)
+
+**T-3V3 :** à brancher sur **3V3** en même temps que la broche **3V3** du module (deux fils vers le même 3,3 V sur la breadboard). Sans ça, le capteur peut marcher mal ou ne pas détecter le doigt correctement.
+
+**T-OUT :** pas nécessaire pour communiquer en UART. Utile plus tard pour réveiller l’ESP32 dès qu’un doigt approche. Pour démarrer : **non branché**.
+
+```
+  Capteur (6 fils)               ESP32
+  ----------------               -----
+  GND          ----------------  GND
+  3V3          ----------------  3V3
+  T-3V3        ----------------  3V3   (même rail 3,3 V)
+  TX           ----------------  GPIO 16  (RX2)
+  RX           ----------------  GPIO 17  (TX2)
+  T-OUT        (rien pour l'instant, ou GPIO 4 plus tard)
+```
+
+### Alimentation — très important
+
+- Brancher le capteur en **3,3 V** sur l’ESP32 (broche **3V3**), **pas** sur **5 V** si les signaux TX/RX sont en 3,3 V (cas le plus fréquent).
+- Certains modules acceptent 5 V sur VCC mais envoient alors parfois du **5 V sur TX** → risque pour l’ESP32. En cas de doute : **3,3 V uniquement**.
+- Tous les **GND** (ESP32, capteur, servo, alimentation externe) doivent être **reliés ensemble**.
+
+### Ordre de branchement recommandé
+
+1. **Couper l’alimentation** (débrancher l’USB).
+2. Relier **GND** capteur → **GND** ESP32.
+3. Relier **VCC** capteur → **3V3** ESP32.
+4. Relier **TX capteur** → **GPIO 16**, **RX capteur** → **GPIO 17**.
+5. Brancher le reste (servo, LEDs…) si besoin.
+6. Rebrancher l’USB.
+
+### Test minimal (sans servo ni LED)
+
+Pour le premier essai : sketch **`esp32/test_composants/test_composants.ino`** (touche **5** dans le menu série).
+
+### Broches déjà utilisées (ne pas réutiliser)
+
+| GPIO | Déjà pris par |
+|------|----------------|
+| 12   | LED verte |
+| 13   | Servo |
+| 14   | LED rouge |
+| 27   | Buzzer |
+| **16, 17** | **Capteur R03 (UART2)** |
+| **4** (optionnel) | **T-OUT** du capteur (plus tard) |
+
+---
+
+## 0ter. Buzzer 5 V + transistor NPN (ton montage)
+
+Schéma identique au §3 ci-dessous :
+
+- **GPIO 27** → résistance **1 kΩ** → **Base** (B) du transistor
+- **Émetteur (E)** → **GND**
+- **Collecteur (C)** → une patte du **buzzer**
+- **Autre patte du buzzer** → **5 V** (broche 5V ESP32 ou alim externe)
+- **GND** buzzer / alim → **GND** commun avec l’ESP32
+
+Dans `security_door.ino` : `#define USE_BUZZER 1`.
+
+---
+
+## 0bis. Je n'ai que les composants (pas de résistances ni transistor)
 
 Dans ce cas, **branche uniquement le servo**. Aucune résistance n'est nécessaire pour lui.
 
@@ -156,6 +241,8 @@ Pense à **relier tous les GND ensemble** (ESP32, alimentation externe, servo, b
                          [ ... ]  [ ... ]
               LED verte  [ 12  ]  [ 13  ]  Servo signal
               LED rouge  [ 14  ]  [ ... ]
+                         [ 16  ]  Capteur R03 RX (reçoit TX capteur)
+                         [ 17  ]  Capteur R03 TX (envoie vers RX capteur)
                          [ ... ]  [ 27  ]  Buzzer (via transistor)
                          [ ... ]  [ ... ]
 ```
@@ -163,6 +250,9 @@ Pense à **relier tous les GND ensemble** (ESP32, alimentation externe, servo, b
 - **GPIO 12** : LED verte (+ résistance 330 Ω → GND)  
 - **GPIO 13** : Servo (signal)  
 - **GPIO 14** : LED rouge (+ résistance 330 Ω → GND)  
+- **GPIO 16** : RX2 ← fil **TX** du capteur R03  
+- **GPIO 17** : TX2 → fil **RX** du capteur R03  
+- **3V3** : VCC du capteur R03  
 - **GPIO 27** : Base du transistor (via 1 kΩ) pour le buzzer 5 V  
 
 Tous les **GND** des composants → **GND** de l’ESP32 (ou de la même alimentation).
@@ -182,5 +272,6 @@ Tous les **GND** des composants → **GND** de l’ESP32 (ou de la même aliment
 | Transistor NPN       | 1        | 2N2222, BC547, 2N3904   |
 | Buzzer actif 5 V     | 1        | Ou piézo + circuit      |
 | Fils Dupont          | -        | Pour tout relier        |
+| Capteur R03 / R503   | 1        | Empreinte UART          |
 
-Une fois le câblage fait, tu peux flasher le programme `security_door.ino` et configurer le WiFi dans le sketch, puis l’IP dans l’app (fichier `config/esp32.ts`).
+Une fois le câblage fait, tu peux flasher le programme `security_door.ino` (ou un sketch test empreinte) et configurer le WiFi dans le sketch, puis l’IP dans l’app (fichier `config/esp32.ts`).

@@ -1,511 +1,118 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
-import { Text, Card, Searchbar, Chip } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS } from '../../constants/theme';
-import { useAuth } from '../../contexts/AuthContext';
-import { apiUrl } from '../../config/api';
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Chip, Searchbar, Text } from 'react-native-paper';
+import { Screen } from '../../components/layout/Screen';
+import { ActivityRow } from '../../components/ui/ActivityRow';
+import { AppCard } from '../../components/ui/Card';
+import { MockBanner } from '../../components/ui/MockBanner';
+import { COLORS, SPACING } from '../../constants/theme';
+import { useSystem } from '../../contexts/SystemContext';
 
-type HistoryItem = {
-  id: number;
-  event_type: string;
-  result: string;
-  details: string | null;
-  created_at: string;
-  name: string | null;
-  email: string | null;
-};
-
-const { width } = Dimensions.get('window');
+const FILTERS = [
+  { id: 'all', label: 'Tous' },
+  { id: 'today', label: "Aujourd'hui" },
+  { id: 'access', label: 'Accès' },
+  { id: 'alarm', label: 'Alarmes' },
+] as const;
 
 export default function HistoryScreen() {
-    const { token } = useAuth();
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedFilter, setSelectedFilter] = useState('all');
-    const [items, setItems] = useState<HistoryItem[]>([]);
-    const [loading, setLoading] = useState(true);
+  const { history, loading } = useSystem();
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]['id']>('all');
 
-    useEffect(() => {
-        if (!token) return;
-        fetch(apiUrl('/api/history?limit=50'), {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then((r) => (r.ok ? r.json() : []))
-            .then(setItems)
-            .catch(() => setItems([]))
-            .finally(() => setLoading(false));
-    }, [token]);
+  const stats = useMemo(() => {
+    const success = history.filter((e) => e.result === 'success').length;
+    const refused = history.filter((e) => e.result === 'refused').length;
+    const alarms = history.filter((e) => e.event_type === 'alarm').length;
+    return { total: history.length, success, refused, alarms };
+  }, [history]);
 
-    const filters = [
-        { id: 'all', label: 'Tous', icon: 'format-list-bulleted' },
-        { id: 'today', label: 'Aujourd\'hui', icon: 'calendar-today' },
-        { id: 'week', label: 'Cette semaine', icon: 'calendar-week' },
-        { id: 'month', label: 'Ce mois', icon: 'calendar-month' },
-    ];
-
-    const statsComputed = {
-        total: items.length,
-        success: items.filter((i) => i.result === 'success' || i.result === 'accepted').length,
-        error: items.filter((i) => i.result === 'error' || i.result === 'refused').length,
-        alarm: items.filter((i) => i.event_type === 'alarm').length,
-    };
-
-    const stats = [
-        {
-            label: 'Total accès',
-            value: String(statsComputed.total),
-            icon: 'door',
-            color: COLORS.primary,
-            gradient: [COLORS.primary, COLORS.primaryLight]
-        },
-        {
-            label: 'Autorisés',
-            value: String(statsComputed.success),
-            icon: 'check-circle',
-            color: COLORS.success,
-            gradient: [COLORS.success, COLORS.successLight]
-        },
-        {
-            label: 'Refusés',
-            value: String(statsComputed.error),
-            icon: 'close-circle',
-            color: COLORS.danger,
-            gradient: [COLORS.danger, '#f87171']
-        },
-        {
-            label: 'Alarmes',
-            value: String(statsComputed.alarm),
-            icon: 'bell',
-            color: COLORS.secondary,
-            gradient: [COLORS.secondary, COLORS.secondaryLight]
-        },
-    ];
-
-    const formatDate = (s: string) => {
-        const d = new Date(s);
-        const now = new Date();
-        const today = now.toDateString();
-        const ds = d.toDateString();
-        if (ds === today) return "Aujourd'hui";
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        if (ds === yesterday.toDateString()) return 'Hier';
-        return d.toLocaleDateString('fr-FR');
-    };
-
-    const getEventLabel = (event_type: string, result: string) => {
-        if (event_type === 'door_open') return result === 'success' ? 'Accès autorisé' : 'Accès refusé';
-        if (event_type === 'alarm') return 'Alarme déclenchée';
-        if (event_type === 'entry_request') return result === 'accepted' ? 'Demande acceptée' : 'Demande refusée';
-        return event_type;
-    };
-
+  const filtered = useMemo(() => {
     const now = new Date();
-    const filterByDate = (h: HistoryItem) => {
-        const d = new Date(h.created_at);
-        if (selectedFilter === 'all') return true;
-        if (selectedFilter === 'today') return d.toDateString() === now.toDateString();
-        const weekAgo = new Date(now);
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        if (selectedFilter === 'week') return d >= weekAgo;
-        const monthAgo = new Date(now);
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        if (selectedFilter === 'month') return d >= monthAgo;
-        return true;
-    };
+    return history.filter((e) => {
+      const d = new Date(e.created_at);
+      if (filter === 'today' && d.toDateString() !== now.toDateString()) return false;
+      if (filter === 'access' && e.event_type !== 'door_open' && e.event_type !== 'door_denied')
+        return false;
+      if (filter === 'alarm' && e.event_type !== 'alarm') return false;
+      const q = search.toLowerCase();
+      if (!q) return true;
+      return (
+        (e.userName?.toLowerCase().includes(q) ?? false) ||
+        e.method.toLowerCase().includes(q) ||
+        (e.details?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [history, filter, search]);
 
-    const recentActivities = items
-        .filter(filterByDate)
-        .map((h) => {
-            const d = new Date(h.created_at);
-            const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-            return {
-                id: h.id,
-                user: h.name || h.email || 'Système',
-                type: getEventLabel(h.event_type, h.result),
-                method: h.event_type === 'door_open' ? 'Empreinte téléphone' : h.event_type,
-                time,
-                date: formatDate(h.created_at),
-                status: h.result === 'success' || h.result === 'accepted' ? 'success' : h.result === 'triggered' ? 'warning' : 'error',
-                device: 'Porte d\'entrée',
-            };
-        })
-        .filter((a) =>
-            !searchQuery || a.user.toLowerCase().includes(searchQuery.toLowerCase()) || a.type.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+  return (
+    <Screen title="Historiques" subtitle="Qui a accédé au domicile">
+      <MockBanner />
+      <Searchbar
+        placeholder="Rechercher…"
+        value={search}
+        onChangeText={setSearch}
+        style={styles.search}
+        inputStyle={styles.searchInput}
+      />
+      <View style={styles.chips}>
+        {FILTERS.map((f) => (
+          <Chip
+            key={f.id}
+            selected={filter === f.id}
+            onPress={() => setFilter(f.id)}
+            style={filter === f.id ? styles.chipOn : undefined}
+            textStyle={filter === f.id ? styles.chipTextOn : undefined}
+          >
+            {f.label}
+          </Chip>
+        ))}
+      </View>
 
-    const getStatusColor = (status: string) => {
-        switch(status) {
-            case 'success': return COLORS.success;
-            case 'error': return COLORS.danger;
-            case 'warning': return COLORS.secondary;
-            case 'danger': return COLORS.danger;
-            default: return COLORS.gray;
-        }
-    };
+      <View style={styles.statsRow}>
+        {[
+          { label: 'Total', value: stats.total },
+          { label: 'Autorisé', value: stats.success },
+          { label: 'Refus', value: stats.refused },
+          { label: 'Alarmes', value: stats.alarms },
+        ].map((s) => (
+          <View key={s.label} style={styles.stat}>
+            <Text style={styles.statValue}>{s.value}</Text>
+            <Text style={styles.statLabel}>{s.label}</Text>
+          </View>
+        ))}
+      </View>
 
-    const getStatusIcon = (status: string) => {
-        switch(status) {
-            case 'success': return 'check-circle';
-            case 'error': return 'close-circle';
-            case 'warning': return 'bell';
-            case 'danger': return 'alert';
-            default: return 'information';
-        }
-    };
-
-    return (
-        <View style={styles.container}>
-            {/* Header avec dégradé */}
-            <LinearGradient
-                colors={[COLORS.primary, COLORS.primaryLight]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.header}
-            >
-                <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle}>Historique</Text>
-                    <Text style={styles.headerSubtitle}>Journal des accès et événements</Text>
-                </View>
-
-                {/* Barre de recherche */}
-                <View style={styles.searchContainer}>
-                    <Searchbar
-                        placeholder="Rechercher un accès..."
-                        onChangeText={setSearchQuery}
-                        value={searchQuery}
-                        style={styles.searchBar}
-                        inputStyle={styles.searchInput}
-                        iconColor={COLORS.gray}
-                        placeholderTextColor={COLORS.gray}
-                    />
-                </View>
-            </LinearGradient>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Stats Cards */}
-                <View style={styles.statsGrid}>
-                    {stats.map((stat, index) => (
-                        <TouchableOpacity key={index} style={styles.statCard}>
-                            <LinearGradient
-                                colors={stat.gradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.statGradient}
-                            >
-                                <View style={styles.statIconContainer}>
-                                    <MaterialCommunityIcons name={stat.icon} size={24} color="white" />
-                                </View>
-                                <Text style={styles.statValue}>{stat.value}</Text>
-                                <Text style={styles.statLabel}>{stat.label}</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
-                {/* Filtres */}
-                <View style={styles.filtersSection}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.filtersContainer}
-                    >
-                        {filters.map((filter) => (
-                            <TouchableOpacity
-                                key={filter.id}
-                                onPress={() => setSelectedFilter(filter.id)}
-                            >
-                                <Chip
-                                    selected={selectedFilter === filter.id}
-                                    style={[
-                                        styles.filterChip,
-                                        selectedFilter === filter.id && styles.filterChipSelected
-                                    ]}
-                                    textStyle={[
-                                        styles.filterText,
-                                        selectedFilter === filter.id && styles.filterTextSelected
-                                    ]}
-                                    icon={() => (
-                                        <MaterialCommunityIcons
-                                            name={filter.icon}
-                                            size={18}
-                                            color={selectedFilter === filter.id ? COLORS.white : COLORS.gray}
-                                        />
-                                    )}
-                                >
-                                    {filter.label}
-                                </Chip>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </View>
-
-                {/* Liste des activités */}
-                <View style={styles.activitiesSection}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Activités récentes</Text>
-                    </View>
-
-                    {loading ? (
-                        <View style={styles.loadingWrap}>
-                            <ActivityIndicator size="large" color={COLORS.primary} />
-                        </View>
-                    ) : recentActivities.length === 0 ? (
-                        <Text style={styles.emptyText}>Aucune activité enregistrée</Text>
-                    ) : recentActivities.map((activity) => (
-                        <Card key={activity.id} style={styles.activityCard}>
-                            <Card.Content style={styles.activityContent}>
-                                <View style={styles.activityLeft}>
-                                    <View style={[
-                                        styles.activityIconContainer,
-                                        { backgroundColor: getStatusColor(activity.status) + '15' }
-                                    ]}>
-                                        <MaterialCommunityIcons
-                                            name={getStatusIcon(activity.status)}
-                                            size={24}
-                                            color={getStatusColor(activity.status)}
-                                        />
-                                    </View>
-                                    <View>
-                                        <Text style={styles.activityUser}>{activity.user}</Text>
-                                        <Text style={styles.activityType}>{activity.type}</Text>
-                                        <View style={styles.activityMeta}>
-                                            <View style={styles.metaItem}>
-                                                <MaterialCommunityIcons name="fingerprint" size={14} color={COLORS.gray} />
-                                                <Text style={styles.metaText}>{activity.method}</Text>
-                                            </View>
-                                            <View style={styles.metaItem}>
-                                                <MaterialCommunityIcons name="door" size={14} color={COLORS.gray} />
-                                                <Text style={styles.metaText}>{activity.device}</Text>
-                                            </View>
-                                        </View>
-                                    </View>
-                                </View>
-
-                                <View style={styles.activityRight}>
-                                    <Text style={styles.activityTime}>{activity.time}</Text>
-                                    <View style={[
-                                        styles.statusBadge,
-                                        { backgroundColor: getStatusColor(activity.status) + '20' }
-                                    ]}>
-                                        <Text style={[
-                                            styles.statusText,
-                                            { color: getStatusColor(activity.status) }
-                                        ]}>
-                                            {activity.date}
-                                        </Text>
-                                    </View>
-                                </View>
-                            </Card.Content>
-                        </Card>
-                    ))}
-                </View>
-
-                <View style={{ height: 90 }} />
-            </ScrollView>
-        </View>
-    );
+      <AppCard title={`${filtered.length} événement(s)`}>
+        {loading && history.length === 0 ? (
+          <ActivityIndicator color={COLORS.primary} style={{ padding: 24 }} />
+        ) : filtered.length === 0 ? (
+          <Text style={styles.empty}>Aucun événement</Text>
+        ) : (
+          filtered.map((e) => <ActivityRow key={e.id} event={e} />)
+        )}
+      </AppCard>
+    </Screen>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-    header: {
-        paddingTop: 60,
-        paddingBottom: 30,
-        paddingHorizontal: 20,
-        borderBottomLeftRadius: 30,
-        borderBottomRightRadius: 30,
-    },
-    headerContent: {
-        marginBottom: 20,
-    },
-    headerTitle: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: COLORS.white,
-        marginBottom: 8,
-    },
-    headerSubtitle: {
-        fontSize: 16,
-        color: 'rgba(255,255,255,0.9)',
-    },
-    searchContainer: {
-        marginTop: 10,
-    },
-    searchBar: {
-        elevation: 0,
-        backgroundColor: COLORS.white,
-        borderRadius: 16,
-        height: 50,
-    },
-    searchInput: {
-        fontSize: 16,
-    },
-    statsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        paddingHorizontal: 20,
-        marginTop: 24,
-        gap: 12,
-    },
-    statCard: {
-        width: (width - 52) / 2,
-        borderRadius: 20,
-        overflow: 'hidden',
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-    },
-    statGradient: {
-        padding: 20,
-        alignItems: 'center',
-    },
-    statIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 12,
-    },
-    statValue: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: COLORS.white,
-        marginBottom: 4,
-    },
-    statLabel: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.9)',
-    },
-    filtersSection: {
-        marginTop: 24,
-        marginBottom: 8,
-    },
-    filtersContainer: {
-        paddingHorizontal: 20,
-        gap: 12,
-    },
-    filterChip: {
-        backgroundColor: COLORS.white,
-        borderRadius: 25,
-        paddingHorizontal: 8,
-    },
-    filterChipSelected: {
-        backgroundColor: COLORS.primary,
-    },
-    filterText: {
-        fontSize: 14,
-        color: COLORS.dark,
-    },
-    filterTextSelected: {
-        color: COLORS.white,
-    },
-    loadingWrap: {
-        paddingVertical: 40,
-        alignItems: 'center',
-    },
-    emptyText: {
-        fontSize: 15,
-        color: COLORS.gray,
-        textAlign: 'center',
-        paddingVertical: 24,
-    },
-    activitiesSection: {
-        marginTop: 24,
-        paddingHorizontal: 20,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: COLORS.dark,
-    },
-    sectionLink: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.primary,
-    },
-    activityCard: {
-        marginBottom: 12,
-        borderRadius: 16,
-        backgroundColor: COLORS.white,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-    },
-    activityContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    activityLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        gap: 12,
-    },
-    activityIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    activityUser: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.dark,
-        marginBottom: 2,
-    },
-    activityType: {
-        fontSize: 14,
-        color: COLORS.gray,
-        marginBottom: 4,
-    },
-    activityMeta: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    metaItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    metaText: {
-        fontSize: 12,
-        color: COLORS.gray,
-    },
-    activityRight: {
-        alignItems: 'flex-end',
-    },
-    activityTime: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: COLORS.dark,
-        marginBottom: 4,
-    },
-    statusBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 20,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
+  search: { backgroundColor: COLORS.surface, elevation: 0 },
+  searchInput: { fontSize: 15 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chipOn: { backgroundColor: COLORS.primary },
+  chipTextOn: { color: COLORS.white },
+  statsRow: { flexDirection: 'row', gap: SPACING.sm },
+  stat: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: SPACING.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statValue: { fontSize: 20, fontWeight: '700', color: COLORS.primary },
+  statLabel: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
+  empty: { textAlign: 'center', color: COLORS.textMuted, padding: SPACING.lg },
 });

@@ -1,10 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-
-const TOKEN_KEY = 'securityapp_token';
-const USER_KEY = 'securityapp_user';
-
-type User = { id: number; email: string; name: string; role: string };
+import type { User } from '../mocks/types';
+import { TOKEN_KEY, USER_KEY } from '../lib/api-client';
+import { setSessionExpiredHandler } from '../lib/session';
+import { api } from '../services/api';
 
 type AuthContextType = {
   user: User | null;
@@ -12,7 +11,6 @@ type AuthContextType = {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
-  refreshUser: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -29,11 +27,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         SecureStore.getItemAsync(USER_KEY),
       ]);
       if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      } else {
-        setToken(null);
-        setUser(null);
+        const parsed = JSON.parse(storedUser) as User;
+        if (parsed.role === 'admin') {
+          setToken(storedToken);
+          setUser(parsed);
+        } else {
+          await SecureStore.deleteItemAsync(TOKEN_KEY);
+          await SecureStore.deleteItemAsync(USER_KEY);
+        }
       }
     } catch {
       setToken(null);
@@ -47,26 +48,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadStored();
   }, [loadStored]);
 
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      setToken(null);
+      setUser(null);
+    });
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     try {
-      const { apiUrl } = await import('../config/api');
-      const res = await fetch(apiUrl('/api/auth/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        return { ok: false, error: data.error || 'Identifiants incorrects' };
+      const { token: t, user: u } = await api.login(email, password);
+      if (u.role !== 'admin') {
+        return {
+          ok: false,
+          error: "Seul le compte administrateur peut utiliser l'application",
+        };
       }
-      const { token: t, user: u } = data;
       await SecureStore.setItemAsync(TOKEN_KEY, t);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(u));
       setToken(t);
       setUser(u);
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: 'Erreur réseau. Vérifiez que le serveur tourne.' };
+      return { ok: false, error: e instanceof Error ? e.message : 'Erreur de connexion' };
     }
   }, []);
 
@@ -78,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser: loadStored }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
