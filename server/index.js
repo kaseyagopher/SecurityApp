@@ -424,10 +424,17 @@ app.get('/api/door/status', auth, async (req, res) => {
 
 app.post('/api/door/open', auth, (req, res) => {
   const userId = req.user.id;
-  const authRow = db.prepare(`
+  const isAdmin = req.user.role === 'admin';
+  const authRow = isAdmin
+    ? { ok: 1 }
+    : db
+        .prepare(
+          `
     SELECT 1 FROM authorized_users WHERE user_id = ?
     UNION SELECT 1 FROM fingerprint_slots WHERE user_id = ? AND active = 1
-  `).get(userId, userId);
+  `
+        )
+        .get(userId, userId);
 
   if (!authRow) {
     insertAccessHistory({
