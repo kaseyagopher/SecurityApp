@@ -1,11 +1,10 @@
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import cors from 'cors';
+import crypto from 'crypto';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import os from 'os';
 import { db } from './db.js';
-import { isUniqueConstraintError } from './lib/sqlite.js';
 import {
   ensureUserAuthorized,
   findSlotBySlotId,
@@ -13,12 +12,13 @@ import {
   listFingerprintSlots,
 } from './lib/fingerprint.js';
 import { getHistoryRows, insertAccessHistory } from './lib/history.js';
+import { isUniqueConstraintError } from './lib/sqlite.js';
 import { esp32Auth } from './middleware/esp32-auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'securityapp-secret-change-in-prod';
-const ESP32_URL = process.env.ESP32_URL || 'http://10.199.43.47';
+const ESP32_URL = process.env.ESP32_URL || 'http://192.168.6.47';
 
 const MAX_FAILED_ATTEMPTS = 3;
 const failedAttempts = new Map();

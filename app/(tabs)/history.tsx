@@ -69,19 +69,7 @@ export default function HistoryScreen() {
         ))}
       </View>
 
-      <View style={styles.statsRow}>
-        {[
-          { label: 'Total', value: stats.total },
-          { label: 'Autorisé', value: stats.success },
-          { label: 'Refus', value: stats.refused },
-          { label: 'Alarmes', value: stats.alarms },
-        ].map((s) => (
-          <View key={s.label} style={styles.stat}>
-            <Text style={styles.statValue}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
-          </View>
-        ))}
-      </View>
+      
 
       <AppCard title={`${filtered.length} événement(s)`}>
         {loading && history.length === 0 ? (
