@@ -1,4 +1,4 @@
-import { ESP32_CONFIG, getEsp32Url } from '../config/esp32';
+import { apiFetch } from '../lib/api-client';
 
 export type EnrollProgress = {
   phase: string;
@@ -9,27 +9,7 @@ export type EnrollProgress = {
 };
 
 async function esp32Fetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ESP32_CONFIG.timeout);
-  try {
-    const res = await fetch(getEsp32Url(path), { ...init, signal: controller.signal });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const msg =
-        typeof data === 'object' && data && 'error' in data
-          ? String((data as { error: string }).error)
-          : `ESP32 erreur ${res.status}`;
-      throw new Error(msg);
-    }
-    return data as T;
-  } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') {
-      throw new Error('ESP32 injoignable (timeout)');
-    }
-    throw e;
-  } finally {
-    clearTimeout(timeout);
-  }
+  return apiFetch<T>(`/api/esp32${path}`, init);
 }
 
 export async function startEsp32Enrollment(slotId: number): Promise<void> {

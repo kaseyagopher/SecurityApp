@@ -93,6 +93,7 @@ export default function UsersScreen() {
     <Screen
       title="Personnes"
       subtitle="Qui peut accéder au domicile"
+      onRefresh={load}
       headerRight={
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <MaterialCommunityIcons name="close" size={26} color={COLORS.white} />

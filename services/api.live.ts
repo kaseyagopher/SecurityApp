@@ -173,22 +173,57 @@ export async function liveEnrollFingerprint(
     startEsp32Enrollment,
     waitEsp32Enrollment,
     cancelEsp32Enrollment,
+    deleteEsp32FingerprintSlot,
   } = await import('./esp32-enroll');
 
   const slots = await apiFetch<FingerprintSlotRow[]>('/api/fingerprint-slots');
-  const used = new Set(slots.map((s) => s.slot_id));
-  let slotId = 1;
-  while (used.has(slotId) && slotId <= 127) slotId++;
+  const existing = slots.find((s) => Number(s.user_id) === Number(userId));
+  const previousSlotId = existing?.slot_id ?? null;
+
+  // Exigence produit: un nouvel enrôlement doit toujours utiliser un nouveau slot.
+  if (existing) {
+    await deleteEsp32FingerprintSlot(existing.slot_id).catch(() => {});
+    await apiFetch(`/api/fingerprint-slots/${existing.id}`, { method: 'DELETE' });
+  }
+
+  const pickNextSlot = (rows: FingerprintSlotRow[]): number => {
+    const used = new Set(rows.map((s) => s.slot_id));
+    let candidate = 1;
+    while (
+      (used.has(candidate) || (previousSlotId != null && candidate === previousSlotId)) &&
+      candidate <= 127
+    ) {
+      candidate++;
+    }
+    return candidate;
+  };
+
+  let pool = slots.filter((s) => s.id !== existing?.id);
+  let slotId = pickNextSlot(pool);
   if (slotId > 127) throw new Error('Capacité du capteur atteinte (127 slots)');
 
-  const row = await apiFetch<FingerprintSlotRow & { id: number }>('/api/fingerprint-slots', {
-    method: 'POST',
-    body: JSON.stringify({
-      user_id: userId,
-      slot_id: slotId,
-      label: 'Assigné via application',
-    }),
-  });
+  let row: FingerprintSlotRow & { id: number } | null = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      row = await apiFetch<FingerprintSlotRow & { id: number }>('/api/fingerprint-slots', {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: userId,
+          slot_id: slotId,
+          label: 'Assigné via application',
+        }),
+      });
+      break;
+    } catch (e) {
+      if (!(e instanceof Error) || !e.message.toLowerCase().includes('assigne')) throw e;
+      // Conflit concurrent ou backend ancien: recalculer un slot libre puis retenter.
+      const refreshed = await apiFetch<FingerprintSlotRow[]>('/api/fingerprint-slots');
+      pool = refreshed.filter((s) => Number(s.user_id) !== Number(userId));
+      slotId = pickNextSlot(pool);
+      if (slotId > 127) throw new Error('Capacité du capteur atteinte (127 slots)');
+    }
+  }
+  if (!row) throw new Error("Impossible d'assigner un slot libre, réessayez.");
 
   try {
     await startEsp32Enrollment(slotId);

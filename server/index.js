@@ -187,6 +187,43 @@ app.post('/api/fingerprint-slots', auth, adminOnly, (req, res) => {
     res.status(201).json(row);
   } catch (e) {
     if (isUniqueConstraintError(e)) {
+      const byUser = db
+        .prepare(
+          `SELECT fs.*, u.name, u.email FROM fingerprint_slots fs
+           JOIN users u ON u.id = fs.user_id WHERE fs.user_id = ? LIMIT 1`
+        )
+        .get(userId);
+      if (byUser) {
+        // L'utilisateur a deja une assignation: on essaye de la basculer vers le slot demande.
+        try {
+          db.prepare(
+            `UPDATE fingerprint_slots
+             SET slot_id = ?, label = ?, active = 1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`
+          ).run(slotId, label, byUser.id);
+          const updated = db
+            .prepare(
+              `SELECT fs.*, u.name, u.email FROM fingerprint_slots fs
+               JOIN users u ON u.id = fs.user_id WHERE fs.id = ?`
+            )
+            .get(byUser.id);
+          return res.status(200).json(updated);
+        } catch (updateErr) {
+          if (isUniqueConstraintError(updateErr)) {
+            return res.status(409).json({ error: `Slot #${slotId} deja assigne` });
+          }
+          throw updateErr;
+        }
+      }
+      const bySlot = db
+        .prepare(
+          `SELECT fs.*, u.name, u.email FROM fingerprint_slots fs
+           JOIN users u ON u.id = fs.user_id WHERE fs.slot_id = ? LIMIT 1`
+        )
+        .get(slotId);
+      if (bySlot) {
+        return res.status(409).json({ error: `Slot #${slotId} deja assigne` });
+      }
       return res.status(409).json({ error: 'Slot ou utilisateur deja assigne' });
     }
     throw e;
@@ -490,6 +527,86 @@ app.post('/api/door/open', auth, (req, res) => {
       });
       res.status(502).json({ error: 'ESP32 non joignable' });
     });
+});
+
+// ---- Proxy admin vers ESP32 (enrôlement/suppression empreinte) ----
+app.post('/api/esp32/fingerprint/enroll', auth, adminOnly, async (req, res) => {
+  const base = ESP32_URL.replace(/\/$/, '');
+  const slotId = parseInt(req.body?.slot_id, 10);
+  if (isNaN(slotId) || slotId < 1 || slotId > 127) {
+    return res.status(400).json({ error: 'slot_id requis (1-127)' });
+  }
+  try {
+    const r = await fetch(`${base}/fingerprint/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot_id: slotId }),
+      signal: AbortSignal.timeout(6000),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: data?.error || `ESP32 erreur ${r.status}` });
+    return res.json(data);
+  } catch (e) {
+    return res
+      .status(502)
+      .json({ error: e instanceof Error ? e.message : 'ESP32 non joignable' });
+  }
+});
+
+app.get('/api/esp32/fingerprint/enroll/status', auth, adminOnly, async (_req, res) => {
+  const base = ESP32_URL.replace(/\/$/, '');
+  try {
+    const r = await fetch(`${base}/fingerprint/enroll/status`, {
+      signal: AbortSignal.timeout(6000),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: data?.error || `ESP32 erreur ${r.status}` });
+    return res.json(data);
+  } catch (e) {
+    return res
+      .status(502)
+      .json({ error: e instanceof Error ? e.message : 'ESP32 non joignable' });
+  }
+});
+
+app.post('/api/esp32/fingerprint/enroll/cancel', auth, adminOnly, async (_req, res) => {
+  const base = ESP32_URL.replace(/\/$/, '');
+  try {
+    const r = await fetch(`${base}/fingerprint/enroll/cancel`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(6000),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: data?.error || `ESP32 erreur ${r.status}` });
+    return res.json(data);
+  } catch (e) {
+    return res
+      .status(502)
+      .json({ error: e instanceof Error ? e.message : 'ESP32 non joignable' });
+  }
+});
+
+app.post('/api/esp32/fingerprint/delete', auth, adminOnly, async (req, res) => {
+  const base = ESP32_URL.replace(/\/$/, '');
+  const slotId = parseInt(req.body?.slot_id, 10);
+  if (isNaN(slotId) || slotId < 1 || slotId > 127) {
+    return res.status(400).json({ error: 'slot_id requis (1-127)' });
+  }
+  try {
+    const r = await fetch(`${base}/fingerprint/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot_id: slotId }),
+      signal: AbortSignal.timeout(6000),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: data?.error || `ESP32 erreur ${r.status}` });
+    return res.json(data);
+  } catch (e) {
+    return res
+      .status(502)
+      .json({ error: e instanceof Error ? e.message : 'ESP32 non joignable' });
+  }
 });
 
 // ---- Historique ----

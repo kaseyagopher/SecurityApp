@@ -2,6 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { Button, Text } from 'react-native-paper';
 import { Screen } from '../../components/layout/Screen';
 import { AppCard } from '../../components/ui/Card';
@@ -18,24 +19,30 @@ type Step = 'pick' | 'scan1' | 'scan2' | 'scan' | 'done';
 export default function EnrollScreen() {
   const { userId: paramUserId } = useLocalSearchParams<{ userId?: string }>();
   const { user: authUser } = useAuth();
+  const isFocused = useIsFocused();
+  const initialSelectedId = paramUserId ? parseInt(paramUserId, 10) : null;
+  const initialStep: Step = initialSelectedId ? (USE_MOCKS ? 'scan1' : 'pick') : 'pick';
   const [users, setUsers] = useState<AppUser[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(
-    paramUserId ? parseInt(paramUserId, 10) : null
-  );
-  const [step, setStep] = useState<Step>(
-    paramUserId ? (USE_MOCKS ? 'scan1' : 'pick') : 'pick'
-  );
+  const [selectedId, setSelectedId] = useState<number | null>(initialSelectedId);
+  const [step, setStep] = useState<Step>(initialStep);
   const [loading, setLoading] = useState(false);
   const [assignedSlot, setAssignedSlot] = useState<number | null>(null);
   const [progress, setProgress] = useState<EnrollProgress | null>(null);
 
   useEffect(() => {
+    if (!isFocused) return;
     if (authUser?.role !== 'admin') {
       router.back();
       return;
     }
+    // Réinitialiser le flux à chaque retour sur cet écran.
+    setAssignedSlot(null);
+    setProgress(null);
+    setLoading(false);
+    setSelectedId(initialSelectedId);
+    setStep(initialStep);
     api.getUsers().then(setUsers);
-  }, [authUser]);
+  }, [authUser, isFocused, initialSelectedId, initialStep]);
 
   const selected = users.find((u) => u.id === selectedId);
 

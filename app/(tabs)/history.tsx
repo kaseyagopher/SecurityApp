@@ -16,7 +16,7 @@ const FILTERS = [
 ] as const;
 
 export default function HistoryScreen() {
-  const { history, loading } = useSystem();
+  const { history, loading, refresh } = useSystem();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['id']>('all');
 
@@ -46,7 +46,11 @@ export default function HistoryScreen() {
   }, [history, filter, search]);
 
   return (
-    <Screen title="Historiques" subtitle="Qui a accédé au domicile">
+    <Screen
+      title="Historiques"
+      subtitle="Qui a accédé au domicile"
+      onRefresh={() => refresh({ silent: true })}
+    >
       <MockBanner />
       <Searchbar
         placeholder="Rechercher…"

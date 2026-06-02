@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { ReactNode } from 'react';
-import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
+import { ReactNode, useCallback, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
 import { Text } from 'react-native-paper';
 import { COLORS, SPACING } from '../../constants/theme';
 
@@ -12,10 +12,31 @@ type Props = {
   headerRight?: ReactNode;
   darkHeader?: boolean;
   contentStyle?: ViewStyle;
+  onRefresh?: () => Promise<void> | void;
 };
 
-export function Screen({ title, subtitle, children, scroll = true, headerRight, darkHeader, contentStyle }: Props) {
+export function Screen({
+  title,
+  subtitle,
+  children,
+  scroll = true,
+  headerRight,
+  darkHeader,
+  contentStyle,
+  onRefresh,
+}: Props) {
   const gradient = darkHeader ? COLORS.darkHeaderGradient : COLORS.headerGradient;
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onRefresh, refreshing]);
 
   const body = (
     <View style={[styles.content, contentStyle]}>
@@ -36,7 +57,15 @@ export function Screen({ title, subtitle, children, scroll = true, headerRight, 
         </View>
       </LinearGradient>
       {scroll ? (
-        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            ) : undefined
+          }
+        >
           {body}
         </ScrollView>
       ) : (

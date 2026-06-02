@@ -42,6 +42,7 @@ export default function HomeScreen() {
     <Screen
       title={`Bonjour, ${firstName}`}
       subtitle="Vue d'ensemble du domicile"
+      onRefresh={() => refresh({ silent: true })}
       headerRight={
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{(user?.name ?? 'A').slice(0, 2).toUpperCase()}</Text>

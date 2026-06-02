@@ -68,7 +68,7 @@ export default function DoorScreen() {
         : 'Verrouillée';
 
   return (
-    <Screen title="Porte" subtitle="Capteur d'empreinte sur place" scroll>
+    <Screen title="Porte" subtitle="Capteur d'empreinte sur place" scroll onRefresh={() => refresh({ silent: true })}>
       <MockBanner />
 
       {loading && !door ? (

@@ -12,7 +12,7 @@ import { useSystem } from '../../contexts/SystemContext';
 
 export default function AlarmScreen() {
   const { user } = useAuth();
-  const { alarm, triggerAlarm, stopAlarm } = useSystem();
+  const { alarm, triggerAlarm, stopAlarm, refresh } = useSystem();
   const [busy, setBusy] = useState(false);
   const isAdmin = user?.role === 'admin';
   const active = alarm?.active ?? false;
@@ -45,7 +45,7 @@ export default function AlarmScreen() {
   };
 
   return (
-    <Screen title="Alarme" subtitle="Sécurité et intrusion">
+    <Screen title="Alarme" subtitle="Sécurité et intrusion" onRefresh={() => refresh({ silent: true })}>
       <MockBanner />
 
       <AppCard accent={active}>
