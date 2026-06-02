@@ -37,6 +37,14 @@ export default function DoorScreen() {
             setBusy(true);
             try {
               await remoteOpen();
+              Alert.alert('Porte', 'Commande d\'ouverture envoyée à l\'ESP32.');
+            } catch (e) {
+              Alert.alert(
+                'Échec',
+                e instanceof Error
+                  ? e.message
+                  : 'Vérifiez le serveur, config/esp32.ts et que l\'ESP32 est en ligne.'
+              );
             } finally {
               setBusy(false);
             }

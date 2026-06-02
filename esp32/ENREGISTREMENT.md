@@ -25,7 +25,7 @@ L’app parle au **serveur** (slot ↔ utilisateur) et à l’**ESP32** (emprein
 ## Enregistrement depuis l’app
 
 1. **Personnes** → **Enregistrer** (ou **Porte** → **Enregistrer une empreinte**)
-2. Choisir la personne (sans empreinte déjà assignée)
+2. Choisir la personne ou **Administrateur** (votre empreinte)
 3. **Démarrer l’enregistrement**
 4. Sur le capteur à la porte : posez le doigt, retirez-le, reposez le **même** doigt
 5. Message **Terminé** dans l’app → la personne peut ouvrir la porte

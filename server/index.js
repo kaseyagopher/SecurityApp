@@ -18,7 +18,7 @@ import { esp32Auth } from './middleware/esp32-auth.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'securityapp-secret-change-in-prod';
-const ESP32_URL = process.env.ESP32_URL || 'http://192.168.6.47';
+const ESP32_URL = process.env.ESP32_URL || 'http://192.168.177.47';
 
 const MAX_FAILED_ATTEMPTS = 3;
 const failedAttempts = new Map();
@@ -424,10 +424,17 @@ app.get('/api/door/status', auth, async (req, res) => {
 
 app.post('/api/door/open', auth, (req, res) => {
   const userId = req.user.id;
-  const authRow = db.prepare(`
+  const isAdmin = req.user.role === 'admin';
+  const authRow = isAdmin
+    ? { ok: 1 }
+    : db
+        .prepare(
+          `
     SELECT 1 FROM authorized_users WHERE user_id = ?
     UNION SELECT 1 FROM fingerprint_slots WHERE user_id = ? AND active = 1
-  `).get(userId, userId);
+  `
+        )
+        .get(userId, userId);
 
   if (!authRow) {
     insertAccessHistory({

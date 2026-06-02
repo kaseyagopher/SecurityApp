@@ -100,7 +100,7 @@ export default function EnrollScreen() {
       {step === 'pick' ? (
         <AppCard title="Choisir la personne">
           {users
-            .filter((u) => u.role !== 'admin' && u.fingerprintSlot == null)
+            .filter((u) => u.fingerprintSlot == null)
             .map((u) => (
               <Button
                 key={u.id}

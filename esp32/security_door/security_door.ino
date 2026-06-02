@@ -32,7 +32,7 @@ const char* WIFI_PASSWORD = "live.net";
 
 // -------- Serveur Node (phase 3) — IP du PC qui lance "npm start", meme WiFi --------
 #define USE_BACKEND     1
-const char* BACKEND_HOST    = "192.168.6.97";    // ← IP du PC (ipconfig), pas l ESP32
+const char* BACKEND_HOST    = "192.168.177.97";    // ← IP du PC (ipconfig), pas l ESP32
 const uint16_t BACKEND_PORT = 3001;
 const char* ESP32_API_KEY   = "change-me-esp32-key";  // = ESP32_API_KEY dans server/.env
 
