@@ -26,5 +26,5 @@ if (Test-Path $nodePath) {
 
 Write-Host ""
 Write-Host "Verifiez aussi : Wi-Fi en profil PRIVE (Parametres Windows)." -ForegroundColor Yellow
-Write-Host "Test telephone : http://10.199.43.97:3001/api/health" -ForegroundColor Yellow
+Write-Host "Test telephone : http://192.168.21.97:3001/api/health" -ForegroundColor Yellow
 Write-Host "Si ca echoue encore = isolation Wi-Fi campus (hotspot telephone ou autre PC)." -ForegroundColor Yellow

@@ -4,8 +4,8 @@ Tout doit pointer vers **deux IP différentes** sur le même Wi‑Fi :
 
 | Appareil | IP actuelle | Rôle |
 |----------|-------------|------|
-| **PC** (serveur + Expo) | `10.199.43.97` | API port **3001**, Metro port **8081** |
-| **ESP32** (porte) | `10.199.43.47` | HTTP port **80** |
+| **PC** (serveur + Expo) | `192.168.21.97` | API port **3001**, Metro port **8081** |
+| **ESP32** (porte) | `192.168.21.47` | HTTP port **80** |
 
 Si `ipconfig` affiche une **autre** IP pour le PC, mettez-la partout où c’est indiqué « PC ».
 
@@ -18,7 +18,7 @@ Si `ipconfig` affiche une **autre** IP pour le PC, mettez-la partout où c’est
 ```env
 PORT=3001
 JWT_SECRET=change-me-in-production
-ESP32_URL=http://10.199.43.47
+ESP32_URL=http://192.168.21.47
 ESP32_API_KEY=change-me-esp32-key
 ```
 
@@ -27,14 +27,14 @@ ESP32_API_KEY=change-me-esp32-key
 ```cpp
 const char* WIFI_SSID     = "A07 de Gopher";      // votre Wi‑Fi
 const char* WIFI_PASSWORD = "wifi-1221";
-const char* BACKEND_HOST    = "10.199.43.97";    // IP du PC (ipconfig)
+const char* BACKEND_HOST    = "192.168.21.97";    // IP du PC (ipconfig)
 const char* ESP32_API_KEY   = "change-me-esp32-key";  // = server/.env
 ```
 
 ### `config/api.ts`
 
 ```ts
-const FALLBACK_HOST = '10.199.43.97';  // IP du PC
+const FALLBACK_HOST = '192.168.21.97';  // IP du PC
 ```
 
 ### `config/app.ts`
@@ -46,7 +46,7 @@ export const USE_MOCKS = false;   // true = démo sans serveur
 ### `config/esp32.ts` (optionnel, admin / ouverture directe ESP32)
 
 ```ts
-baseUrl: 'http://10.199.43.47',
+baseUrl: 'http://192.168.21.47',
 ```
 
 ---
@@ -101,7 +101,7 @@ Attendu :
 
 ```
 SecurityApp API : http://localhost:3001
-  → http://10.199.43.97:3001
+  → http://192.168.21.97:3001
 ```
 
 **Terminal 2 — Expo**
@@ -111,7 +111,7 @@ cd C:\Users\Gopher\Documents\Codes\SecurityApp
 npm start
 ```
 
-Même Wi‑Fi que le PC → Expo Go → QR ou `exp://10.199.43.97:8081`.
+Même Wi‑Fi que le PC → Expo Go → QR ou `exp://192.168.21.97:8081`.
 
 ---
 
@@ -120,8 +120,8 @@ Même Wi‑Fi que le PC → Expo Go → QR ou `exp://10.199.43.97:8081`.
 | # | Où | URL | OK si |
 |---|-----|-----|--------|
 | 1 | PC | http://localhost:3001/api/health | `{"ok":true,...}` |
-| 2 | PC | http://10.199.43.47/status | JSON capteur |
-| 3 | **Téléphone** (Chrome) | http://10.199.43.97:3001/api/health | même JSON |
+| 2 | PC | http://192.168.21.47/status | JSON capteur |
+| 3 | **Téléphone** (Chrome) | http://192.168.21.97:3001/api/health | même JSON |
 | 4 | App | Login admin | Accueil sans timeout |
 
 Si **3 échoue** sur le téléphone mais **1 OK** sur le PC → **pare-feu Windows** (script ci-dessous) ou **isolation Wi‑Fi** du campus.  
@@ -135,7 +135,7 @@ PowerShell **administrateur**, à la racine du projet :
 .\scripts\autoriser-parefeu.ps1
 ```
 
-Puis retester sur le téléphone : `http://10.199.43.97:3001/api/health`
+Puis retester sur le téléphone : `http://192.168.21.97:3001/api/health`
 
 ---
 

@@ -17,7 +17,7 @@ L’app parle au **serveur** (slot ↔ utilisateur) et à l’**ESP32** (emprein
 - Serveur : `cd server` → `npm start`
 - ESP32 en Wi‑Fi avec `security_door.ino` (capteur R03 sur GPIO 16/17)
 - Téléphone et ESP32 sur le **même réseau** que le PC
-- `config/esp32.ts` : IP de l’ESP32 (ex. `http://10.199.43.47`)
+- `config/esp32.ts` : IP de l’ESP32 (ex. `http://192.168.21.47`)
 - Compte **admin** dans l’app
 
 ---

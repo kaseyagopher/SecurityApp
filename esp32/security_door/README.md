@@ -19,7 +19,7 @@ const char* WIFI_SSID = "...";
 const char* WIFI_PASSWORD = "...";
 
 // Serveur (IP du PC qui lance npm start — ipconfig)
-const char* BACKEND_HOST = "10.199.43.x";
+const char* BACKEND_HOST = "192.168.21.97";
 const uint16_t BACKEND_PORT = 3001;
 const char* ESP32_API_KEY = "...";  // identique a server/.env
 ```
