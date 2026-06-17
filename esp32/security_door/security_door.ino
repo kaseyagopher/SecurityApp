@@ -28,11 +28,11 @@
 
 // -------- WiFi (a configurer) --------
 const char* WIFI_SSID     = "TECHNO POP 10C";
-const char* WIFI_PASSWORD = "live.net";
+const char* WIFI_PASSWORD = r"live.net";
 
 // -------- Serveur Node (phase 3) — IP du PC qui lance "npm start", meme WiFi --------
 #define USE_BACKEND     1
-const char* BACKEND_HOST    = "192.168.177.108";    // ← IP du PC (ipconfig), pas l ESP32
+const char* BACKEND_HOST    = "192.168.21.97";    // ← IP du PC (ipconfig), pas l ESP32
 const uint16_t BACKEND_PORT = 3001;
 const char* ESP32_API_KEY   = "change-me-esp32-key";  // = ESP32_API_KEY dans server/.env
 
@@ -52,7 +52,7 @@ const int FINGER_TX_PIN  = 17;
 // -------- Servo --------
 const int SERVO_LOCKED   = 180;
 const int SERVO_UNLOCKED = 90;
-const int DOOR_OPEN_MS   = 10000;  // porte ouverte 10 s
+const int DOOR_OPEN_MS   = 5000;  // porte ouverte 10 s
 const int SERVO_STEP_DEG = 2;      // pas par cran (mouvement progressif)
 const int SERVO_STEP_MS  = 30;     // delai entre chaque cran
 

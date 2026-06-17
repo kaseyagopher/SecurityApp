@@ -18,7 +18,7 @@ import { esp32Auth } from './middleware/esp32-auth.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'securityapp-secret-change-in-prod';
-const ESP32_URL = process.env.ESP32_URL || 'http://192.168.177.47';
+const ESP32_URL = process.env.ESP32_URL || 'http://192.168.177.97';
 
 const MAX_FAILED_ATTEMPTS = 3;
 const failedAttempts = new Map();

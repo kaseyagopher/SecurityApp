@@ -5,7 +5,7 @@
  */
 export const ESP32_CONFIG = {
   /** URL de base de l'ESP32 (ex: http://192.168.1.100) */
-  baseUrl: 'http://192.168.177.47',
+  baseUrl: 'http://192.168.21.97',
 
   /** Timeout des requêtes vers l'ESP32 (ms) */
   timeout: 8000,
