@@ -14,6 +14,7 @@ import {
 import { getHistoryRows, insertAccessHistory } from './lib/history.js';
 import { isUniqueConstraintError } from './lib/sqlite.js';
 import { esp32Auth } from './middleware/esp32-auth.js';
+import { sqliteUtcToIso } from './lib/datetime.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -55,10 +56,10 @@ function mapUserRow(row) {
     email: row.email,
     name: row.name,
     role: row.role,
-    created_at: row.created_at,
+    created_at: sqliteUtcToIso(row.created_at),
     isAuthorized: Boolean(row.is_authorized),
     fingerprintSlot: row.fingerprint_slot ?? null,
-    fingerprintEnrolledAt: row.fingerprint_enrolled_at ?? null,
+    fingerprintEnrolledAt: sqliteUtcToIso(row.fingerprint_enrolled_at) ?? null,
   };
 }
 

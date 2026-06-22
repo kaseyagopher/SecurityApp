@@ -6,6 +6,7 @@ import { ActivityRow } from '../../components/ui/ActivityRow';
 import { AppCard } from '../../components/ui/Card';
 import { MockBanner } from '../../components/ui/MockBanner';
 import { COLORS, SPACING } from '../../constants/theme';
+import { parseServerDate } from '../../lib/datetime';
 import { useSystem } from '../../contexts/SystemContext';
 
 const FILTERS = [
@@ -30,7 +31,7 @@ export default function HistoryScreen() {
   const filtered = useMemo(() => {
     const now = new Date();
     return history.filter((e) => {
-      const d = new Date(e.created_at);
+      const d = parseServerDate(e.created_at);
       if (filter === 'today' && d.toDateString() !== now.toDateString()) return false;
       if (filter === 'access' && e.event_type !== 'door_open' && e.event_type !== 'door_denied')
         return false;

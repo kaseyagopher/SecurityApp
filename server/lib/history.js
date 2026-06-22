@@ -1,4 +1,5 @@
 import { db } from '../db.js';
+import { sqliteUtcToIso } from './datetime.js';
 
 const EVENT_TO_APP = {
   fingerprint_granted: 'door_open',
@@ -63,7 +64,7 @@ export function mapHistoryRow(row) {
     method: row.method ?? 'Application',
     userName,
     details: row.details,
-    created_at: row.created_at,
+    created_at: sqliteUtcToIso(row.created_at),
     fingerprint_slot: row.fingerprint_slot ?? null,
     source: row.source ?? 'app',
   };

@@ -11,6 +11,7 @@ import { MockBanner } from '../../components/ui/MockBanner';
 import { QuickTile } from '../../components/ui/QuickTile';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { COLORS, RADIUS, SPACING } from '../../constants/theme';
+import { parseServerDate } from '../../lib/datetime';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSystem } from '../../contexts/SystemContext';
 
@@ -70,7 +71,7 @@ export default function HomeScreen() {
                 {door?.lastAccessAt ? (
                   <Text style={styles.doorMeta}>
                     Dernier accès : {door.lastAccessBy} ·{' '}
-                    {new Date(door.lastAccessAt).toLocaleTimeString('fr-FR', {
+                    {parseServerDate(door.lastAccessAt).toLocaleTimeString('fr-FR', {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
@@ -95,7 +96,7 @@ export default function HomeScreen() {
                   {alarm?.triggeredAt ? (
                     <Text style={styles.alarmTime}>
                       Depuis{' '}
-                      {new Date(alarm.triggeredAt).toLocaleTimeString('fr-FR', {
+                      {parseServerDate(alarm.triggeredAt).toLocaleTimeString('fr-FR', {
                         hour: '2-digit',
                         minute: '2-digit',
                       })}

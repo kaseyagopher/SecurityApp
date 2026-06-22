@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import type { AccessEvent } from '../../mocks/types';
 import { COLORS, RADIUS, SPACING } from '../../constants/theme';
+import { parseServerDate } from '../../lib/datetime';
 
 function eventMeta(event: AccessEvent) {
   const isUnknown =
@@ -34,7 +35,7 @@ type Props = { event: AccessEvent; compact?: boolean };
 
 export function ActivityRow({ event, compact }: Props) {
   const meta = eventMeta(event);
-  const d = new Date(event.created_at);
+  const d = parseServerDate(event.created_at);
   const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const date = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   const who =

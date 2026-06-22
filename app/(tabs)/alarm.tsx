@@ -7,6 +7,7 @@ import { AppCard } from '../../components/ui/Card';
 import { MockBanner } from '../../components/ui/MockBanner';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { COLORS, SPACING } from '../../constants/theme';
+import { parseServerDate } from '../../lib/datetime';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSystem } from '../../contexts/SystemContext';
 
@@ -60,7 +61,7 @@ export default function AlarmScreen() {
           <StatusBadge label={active ? 'Alarme active' : 'Système au repos'} tone={active ? 'danger' : 'success'} />
           <Text style={styles.desc}>
             {active
-              ? `Déclenchée${alarm?.triggeredAt ? ` à ${new Date(alarm.triggeredAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}. ${alarm?.reason ?? ''}`
+              ? `Déclenchée${alarm?.triggeredAt ? ` à ${parseServerDate(alarm.triggeredAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}. ${alarm?.reason ?? ''}`
               : "L'alarme se déclenche aussi automatiquement après 3 tentatives d'accès refusées au capteur."}
           </Text>
         </View>
