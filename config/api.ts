@@ -5,7 +5,7 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-const FALLBACK_HOST = '192.168.21.97';
+const FALLBACK_HOST = '10.78.217.97';
 const API_PORT = 3001;
 
 function hostFromExpo(): string | null {

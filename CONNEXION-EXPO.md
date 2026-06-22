@@ -43,7 +43,7 @@ Le script fait `adb reverse` pour les ports **8081** (Expo) et **3001** (API). L
 2. `npm start` (ou `npm run start:lan`).
 3. **Pare-feu Windows** : autoriser **Node.js** en réseau **privé** (ports 8081 et 3001).
 4. Test sur le **navigateur du téléphone** :  
-   `http://192.168.21.97:3001/api/health`  
+   `http://10.78.217.97:3001/api/health`  
    (remplacez par l’IP du PC affichée par `ipconfig`).
 
 Si ce test **échoue** dans le navigateur du téléphone → isolation Wi‑Fi : utilisez solution 1 ou 2, pas le pare-feu seul.

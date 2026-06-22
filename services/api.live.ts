@@ -174,6 +174,7 @@ export async function liveEnrollFingerprint(
     waitEsp32Enrollment,
     cancelEsp32Enrollment,
     deleteEsp32FingerprintSlot,
+    syncEsp32Slots,
   } = await import('./esp32-enroll');
 
   const slots = await apiFetch<FingerprintSlotRow[]>('/api/fingerprint-slots');
@@ -228,6 +229,7 @@ export async function liveEnrollFingerprint(
   try {
     await startEsp32Enrollment(slotId);
     await waitEsp32Enrollment(onProgress);
+    await syncEsp32Slots().catch(() => {});
   } catch (e) {
     await cancelEsp32Enrollment().catch(() => {});
     await apiFetch(`/api/fingerprint-slots/${row.id}`, { method: 'DELETE' }).catch(() => {});

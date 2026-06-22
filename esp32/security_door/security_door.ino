@@ -27,12 +27,12 @@
 #include <Adafruit_Fingerprint.h>
 
 // -------- WiFi (a configurer) --------
-const char* WIFI_SSID     = "TECHNO POP 10C";
-const char* WIFI_PASSWORD = r"live.net";
+const char* WIFI_SSID     = "A07 de Gopher";
+const char* WIFI_PASSWORD = "wifi-1221";
 
 // -------- Serveur Node (phase 3) — IP du PC qui lance "npm start", meme WiFi --------
 #define USE_BACKEND     1
-const char* BACKEND_HOST    = "192.168.21.97";    // ← IP du PC (ipconfig), pas l ESP32
+const char* BACKEND_HOST    = "10.78.217.97";    // ← IP du PC (ipconfig), pas l ESP32
 const uint16_t BACKEND_PORT = 3001;
 const char* ESP32_API_KEY   = "change-me-esp32-key";  // = ESP32_API_KEY dans server/.env
 
@@ -61,7 +61,7 @@ const int MAX_FAILED_ATTEMPTS = 3;
 const unsigned long DENY_LED_MS = 800;
 const unsigned long FINGER_POLL_MS = 80;
 const unsigned long ALARM_AUTO_STOP_MS = 180000;  // 3 min max (evite blocage)
-const unsigned long SLOT_SYNC_MS = 300000;        // resync slots toutes les 5 min
+const unsigned long SLOT_SYNC_MS = 60000;         // resync slots toutes les 1 min
 
 #define MAX_AUTH_SLOTS 16
 const uint8_t FALLBACK_SLOTS[] = {1};
@@ -241,9 +241,7 @@ void syncAuthorizedSlotsFromServer() {
     if (authorizedSlotCount > 0) {
       printAuthorizedSlots("Slots serveur");
     } else {
-      Serial.println("Serveur : 0 slot actif -> fallback local");
-      applyFallbackSlots();
-      printAuthorizedSlots("Slots fallback");
+      Serial.println("Serveur : 0 slot actif");
     }
   } else {
     if (authorizedSlotCount == 0) {
@@ -469,6 +467,14 @@ bool isSlotAuthorized(uint16_t slotId) {
   return false;
 }
 
+void addLocalAuthorizedSlot(uint8_t slotId) {
+  if (slotId == 0 || isSlotAuthorized(slotId)) return;
+  if (authorizedSlotCount >= MAX_AUTH_SLOTS) return;
+  authorizedSlots[authorizedSlotCount++] = slotId;
+  Serial.print("Slot autorise localement : ");
+  Serial.println(slotId);
+}
+
 bool captureAndIdentify(uint16_t* outId, uint16_t* outConfidence) {
   if (!fingerReady) return false;
 
@@ -504,6 +510,17 @@ void onAccessGranted(uint16_t slotId, uint16_t confidence) {
 }
 
 void onAccessDenied(uint16_t slotId, uint16_t confidence) {
+  // Auto-reparation : empreinte reconnue mais slot pas encore synchronise
+  if (slotId > 0 && !isSlotAuthorized(slotId)) {
+    Serial.print("Slot ");
+    Serial.print(slotId);
+    Serial.println(" reconnu mais non autorise — resync serveur");
+    if (fetchAuthorizedSlotsFromServer() && isSlotAuthorized(slotId)) {
+      onAccessGranted(slotId, confidence);
+      return;
+    }
+  }
+
   lastEvent = "denied";
   lastConfidence = confidence;
   if (slotId > 0) {
@@ -723,6 +740,7 @@ void pollEnrollment() {
       enrollPhaseAt = millis();
       Serial.print("Enregistrement OK slot ");
       Serial.println(enrollSlotId);
+      addLocalAuthorizedSlot((uint8_t)enrollSlotId);
 #if USE_LEDS
       digitalWrite(LED_OK_PIN, HIGH);
       delay(300);
@@ -789,6 +807,19 @@ void handleEnrollStatus() {
 void handleEnrollCancel() {
   resetEnrollmentIdle();
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Annule\"}");
+}
+
+void handleSyncSlots() {
+  syncAuthorizedSlotsFromServer();
+  String json = "{\"success\":true,\"slots\":[";
+  for (size_t i = 0; i < authorizedSlotCount; i++) {
+    if (i > 0) json += ",";
+    json += authorizedSlots[i];
+  }
+  json += "],\"count\":";
+  json += authorizedSlotCount;
+  json += "}";
+  server.send(200, "application/json", json);
 }
 
 void handleFingerprintDelete() {
@@ -963,6 +994,8 @@ void setup() {
   server.on("/fingerprint/enroll/status", HTTP_GET, handleEnrollStatus);
   server.on("/fingerprint/enroll/cancel", HTTP_POST, handleEnrollCancel);
   server.on("/fingerprint/delete", HTTP_POST, handleFingerprintDelete);
+  server.on("/sync-slots", HTTP_POST, handleSyncSlots);
+  server.on("/sync-slots", HTTP_GET, handleSyncSlots);
   server.onNotFound([]() {
     server.send(404, "application/json", "{\"error\":\"Not Found\"}");
   });

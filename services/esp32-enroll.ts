@@ -24,6 +24,10 @@ export async function getEsp32EnrollStatus(): Promise<EnrollProgress> {
   return esp32Fetch<EnrollProgress>('/fingerprint/enroll/status');
 }
 
+export async function syncEsp32Slots(): Promise<void> {
+  await esp32Fetch('/sync-slots', { method: 'POST' });
+}
+
 export async function cancelEsp32Enrollment(): Promise<void> {
   await esp32Fetch('/fingerprint/enroll/cancel', { method: 'POST' });
 }

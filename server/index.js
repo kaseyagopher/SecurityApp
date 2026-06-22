@@ -18,7 +18,7 @@ import { esp32Auth } from './middleware/esp32-auth.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'securityapp-secret-change-in-prod';
-const ESP32_URL = process.env.ESP32_URL || 'http://192.168.21.47';
+const ESP32_URL = process.env.ESP32_URL || 'http://10.78.217.47';
 
 const MAX_FAILED_ATTEMPTS = 3;
 const failedAttempts = new Map();
@@ -27,6 +27,11 @@ const FAILED_WINDOW_MS = 5 * 60 * 1000;
 function triggerEsp32Alarm() {
   const url = `${ESP32_URL.replace(/\/$/, '')}/alarm`;
   return fetch(url, { method: 'POST' }).catch(() => null);
+}
+
+function triggerEsp32SlotSync() {
+  const url = `${ESP32_URL.replace(/\/$/, '')}/sync-slots`;
+  return fetch(url, { method: 'POST', signal: AbortSignal.timeout(5000) }).catch(() => null);
 }
 
 function recordFailedAttempt(userId) {
@@ -184,6 +189,7 @@ app.post('/api/fingerprint-slots', auth, adminOnly, (req, res) => {
          JOIN users u ON u.id = fs.user_id WHERE fs.id = ?`
       )
       .get(r.lastInsertRowid);
+    void triggerEsp32SlotSync();
     res.status(201).json(row);
   } catch (e) {
     if (isUniqueConstraintError(e)) {
@@ -207,6 +213,7 @@ app.post('/api/fingerprint-slots', auth, adminOnly, (req, res) => {
                JOIN users u ON u.id = fs.user_id WHERE fs.id = ?`
             )
             .get(byUser.id);
+          void triggerEsp32SlotSync();
           return res.status(200).json(updated);
         } catch (updateErr) {
           if (isUniqueConstraintError(updateErr)) {
@@ -597,6 +604,23 @@ app.post('/api/esp32/fingerprint/delete', auth, adminOnly, async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slot_id: slotId }),
+      signal: AbortSignal.timeout(6000),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: data?.error || `ESP32 erreur ${r.status}` });
+    return res.json(data);
+  } catch (e) {
+    return res
+      .status(502)
+      .json({ error: e instanceof Error ? e.message : 'ESP32 non joignable' });
+  }
+});
+
+app.post('/api/esp32/sync-slots', auth, adminOnly, async (_req, res) => {
+  const base = ESP32_URL.replace(/\/$/, '');
+  try {
+    const r = await fetch(`${base}/sync-slots`, {
+      method: 'POST',
       signal: AbortSignal.timeout(6000),
     });
     const data = await r.json().catch(() => ({}));
